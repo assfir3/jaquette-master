@@ -6,6 +6,8 @@
 export interface Env {
   STEAMGRIDDB_API_KEY?: string;
   MOBYGAMES_API_KEY?: string;
+  /** Où l'utilisateur range ses clés (affiché dans l'interface). */
+  CONFIG_FILE?: string;
 }
 
 export interface Visual {
@@ -68,7 +70,12 @@ export async function handleApi(req: Request, env: Env): Promise<Response | null
   try {
     const path = url.pathname.slice(5);
     if (path === 'status')
-      return json({ steam: true, steamgriddb: !!env.STEAMGRIDDB_API_KEY, mobygames: !!env.MOBYGAMES_API_KEY });
+      return json({
+        steam: true,
+        steamgriddb: !!env.STEAMGRIDDB_API_KEY,
+        mobygames: !!env.MOBYGAMES_API_KEY,
+        configFile: env.CONFIG_FILE ?? '.env.local',
+      });
     if (path === 'moby/find') return json(await mobyFind(url.searchParams.get('title') ?? '', env));
     if (path === 'moby/covers')
       return json(await mobyCovers(url.searchParams.get('game') ?? '', url.searchParams.get('platform') ?? '', env));

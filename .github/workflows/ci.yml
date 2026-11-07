@@ -1,0 +1,24 @@
+# Vérifie chaque proposition de modification : types, construction de l'interface et de l'appli de bureau.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verifications:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Vérification des types
+        run: npm run check
+      - name: Construction de l'interface
+        run: npm run build
+      - name: Construction de l'appli de bureau
+        run: npm run build:electron

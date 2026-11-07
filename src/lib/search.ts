@@ -12,7 +12,8 @@ async function api<T>(path: string): Promise<T> {
   return data as T;
 }
 
-export const getStatus = () => api<{ steam: boolean; steamgriddb: boolean; mobygames: boolean }>('status');
+export const getStatus = () =>
+  api<{ steam: boolean; steamgriddb: boolean; mobygames: boolean; configFile: string }>('status');
 export const findMoby = (title: string) => api<MobyGame | null>(`moby/find?title=${encodeURIComponent(title)}`);
 export const getCoverPacks = (game: number, platform: number) => api<CoverPack[]>(`moby/covers?game=${game}&platform=${platform}`);
 export const searchGames = (q: string) => api<SearchResult[]>(`search?q=${encodeURIComponent(q)}`);

@@ -2,13 +2,33 @@
 
 Créer facilement des jaquettes de jeux vidéo à imprimer : face avant, tranche et dos d'un boîtier DVD, exportés en PDF 300 dpi avec fond perdu et traits de coupe.
 
-## Lancer
+## Télécharger
+
+Les applis prêtes à installer sont dans les [Releases](https://github.com/assfir3/jaquette-master/releases/latest) :
+
+- **Windows** : `Jaquette-Master-…-windows-setup.exe`
+- **Mac Apple Silicon** (M1, M2, M3…) : `Jaquette-Master-…-mac-arm64.dmg`
+- **Mac Intel** : `Jaquette-Master-…-mac-x64.dmg`
+
+L'appli n'est pas encore signée par Apple ni Microsoft : au premier lancement, Windows affiche « Windows a protégé votre ordinateur » (*Informations complémentaires* → *Exécuter quand même*) ; sur Mac, ouvre l'appli une fois puis clique sur *Ouvrir quand même* dans *Réglages Système › Confidentialité et sécurité*.
+
+Les clés d'API facultatives (SteamGridDB, MobyGames) se rangent dans le fichier `config.json` créé au premier lancement ; son emplacement exact est affiché dans l'onglet Recherche :
+- macOS : `~/Library/Application Support/jaquette-master/config.json`
+- Windows : `%APPDATA%\jaquette-master\config.json`
+
+## Contribuer
+
+Le projet est communautaire : idées, bugs et modifications sont les bienvenus. Chaque changement se fait sur sa propre branche puis passe par une pull request : tout est expliqué dans [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Lancer depuis le code
 
 ```bash
 npm install
-npm run dev      # http://localhost:5180
-npm run build    # version statique dans dist/
-npm run check    # vérification des types
+npm run dev        # version web : http://localhost:5180
+npm run app        # version de bureau (Electron)
+npm run check      # vérification des types
+npm run dist:mac   # fabrique le .dmg (sur un Mac)
+npm run dist:win   # fabrique le .exe (sur Windows)
 ```
 
 ## Recherche automatique
@@ -99,6 +119,8 @@ Les positions des planches d'étiquettes du commerce varient d'une marque à l'a
 - `src/lib/Shelf.svelte` : la vue Étagère.
 - `src/lib/print.ts` et `src/lib/PrintView.svelte` : formats de papier, planches d'étiquettes, impression directe sur CD, calibrage.
 - `src/lib/Preview3D.svelte` : le boîtier 3D (Three.js) qui s'ouvre.
+- `electron/main.ts` : l'appli de bureau ; sert l'interface et `/api` via l'adresse interne `jaquette://app`.
+- `.github/workflows/` : vérifications de chaque pull request, et fabrication du `.dmg` / `.exe` à chaque version.
 
 ## Prochaines étapes
 

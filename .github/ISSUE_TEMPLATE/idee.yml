@@ -1,0 +1,16 @@
+name: Proposer une idée
+description: Une fonction, un format de boîtier, une planche d'étiquettes…
+labels: [idée]
+body:
+  - type: textarea
+    id: idee
+    attributes:
+      label: Ton idée
+      description: Qu'est-ce qui te manque, et à quoi ça servirait ?
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Détails utiles
+      description: Dimensions (en mm), références de planches, exemples de jaquettes, captures…

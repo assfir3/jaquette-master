@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["svelte", "vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "server/**/*.ts"]
+  "include": ["electron/**/*.ts", "src/**/*.ts", "src/**/*.svelte", "server/**/*.ts"]
 }

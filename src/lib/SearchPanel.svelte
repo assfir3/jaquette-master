@@ -33,6 +33,8 @@
   let loadingGame = $state(false);
   let building = $state(false);
   let hasSgdb = $state(false);
+  /** Fichier où ranger les clés : .env.local en développement, config.json dans l'appli de bureau. */
+  let configFile = $state('.env.local');
   let error = $state<string | null>(null);
 
   // Choix pour la mise en page automatique.
@@ -62,6 +64,7 @@
     getStatus()
       .then((s) => {
         hasSgdb = s.steamgriddb;
+        configFile = s.configFile ?? configFile;
         hasMoby = s.mobygames;
       })
       .catch(() => {});
@@ -314,7 +317,7 @@
       {#if !hasMoby}
         <p class="note">
           Pour retrouver les vraies jaquettes françaises (face, dos et disque scannés), ajoute une clé
-          <strong>MobyGames</strong> dans <code>.env.local</code> (<code>MOBYGAMES_API_KEY</code>).
+          <strong>MobyGames</strong> dans <code class="path">{configFile}</code> (<code>MOBYGAMES_API_KEY</code>).
         </p>
       {:else if mobyError}
         <p class="error">{mobyError}</p>
@@ -404,7 +407,7 @@
     {#if !hasSgdb}
       <p class="note">
         Recherche via Steam uniquement. Ajoute une clé <strong>SteamGridDB</strong> (gratuite) dans
-        <code>.env.local</code> pour plus de jaquettes et de logos, et les jeux hors Steam.
+        <code class="path">{configFile}</code> pour plus de jaquettes et de logos, et les jeux hors Steam.
       </p>
     {/if}
   {/if}
@@ -704,6 +707,9 @@
     margin-top: 6px;
   }
   .hint,
+  .path {
+    word-break: break-all;
+  }
   .note {
     margin: 0;
     font-size: 11px;

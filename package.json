@@ -7,20 +7,93 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "build:electron": "esbuild electron/main.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist-electron/main.cjs",
+    "app": "npm run build && npm run build:electron && electron .",
+    "dist": "npm run build && npm run build:electron && electron-builder --publish never",
+    "dist:mac": "npm run build && npm run build:electron && electron-builder --mac --publish never",
+    "dist:win": "npm run build && npm run build:electron && electron-builder --win --publish never"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tsconfig/svelte": "^5.0.8",
     "@types/three": "^0.187.0",
+    "electron": "44.9.3",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "jspdf": "^4.2.1",
+    "konva": "^10.9.1",
     "svelte": "^5.57.3",
     "svelte-check": "^4.7.8",
+    "three": "^0.187.0",
     "typescript": "^6.0.3",
     "vite": "^8.3.6"
   },
-  "dependencies": {
-    "jspdf": "^4.2.1",
-    "konva": "^10.9.1",
-    "three": "^0.187.0"
+  "description": "Créer et imprimer des jaquettes de jeux vidéo (boîtier DVD, rondelle CD).",
+  "author": {
+    "name": "Arthur Clément"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/assfir3/jaquette-master",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/assfir3/jaquette-master.git"
+  },
+  "main": "dist-electron/main.cjs",
+  "build": {
+    "appId": "io.github.assfir3.jaquettemaster",
+    "productName": "Jaquette Master",
+    "copyright": "© 2026 Arthur Clément — licence MIT",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.graphics-design",
+      "icon": "build/icon.png"
+    },
+    "dmg": {
+      "artifactName": "Jaquette-Master-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Jaquette-Master-${version}-windows-setup.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Graphics",
+      "icon": "build/icon.png"
+    },
+    "appImage": {
+      "artifactName": "Jaquette-Master-${version}-linux.${ext}"
+    }
   }
 }

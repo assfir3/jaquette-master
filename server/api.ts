@@ -414,8 +414,17 @@ async function commonsSearch(q: string): Promise<LogoFile[]> {
 async function commonsFiles(titles: string[]): Promise<LogoFile[]> {
   const list = titles.map((t) => t.trim()).filter(Boolean).slice(0, 50);
   if (!list.length) return [];
-  const data = await getJson<{ query?: { pages?: CommonsPage[] } }>(commonsUrl({ titles: list.join('|') }));
-  return (data.query?.pages ?? []).map(toLogo).filter((l): l is LogoFile => !!l);
+  type Rename = { from: string; to: string };
+  const data = await getJson<{ query?: { pages?: CommonsPage[]; normalized?: Rename[]; redirects?: Rename[] } }>(
+    commonsUrl({ titles: list.join('|'), redirects: '1' }),
+  );
+  // Un fichier renommé sur Commons garde le nom demandé, pour que le catalogue le retrouve.
+  const asked = new Map<string, string>();
+  for (const r of [...(data.query?.normalized ?? []), ...(data.query?.redirects ?? [])]) asked.set(r.to, asked.get(r.from) ?? r.from);
+  return (data.query?.pages ?? [])
+    .map(toLogo)
+    .filter((l): l is LogoFile => !!l)
+    .map((l) => ({ ...l, title: asked.get(l.title) ?? l.title }));
 }
 
 // ---------- Logos officiels des jeux et des studios ----------

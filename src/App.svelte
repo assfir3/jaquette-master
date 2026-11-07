@@ -5,6 +5,7 @@
   import SearchPanel from './lib/SearchPanel.svelte';
   import LogosPanel from './lib/LogosPanel.svelte';
   import Shelf from './lib/Shelf.svelte';
+  import PrintView from './lib/PrintView.svelte';
   import { addLogo, type LogoRef } from './lib/logos';
   import { loadVisual } from './lib/search';
   import { editor } from './lib/editor.svelte';
@@ -44,7 +45,7 @@
   let imageTarget = $state<ClipTarget>('front');
   let tab = $state<'search' | 'logos' | 'design'>('search');
   let show3d = $state(false);
-  let view = $state<'atelier' | 'shelf'>('atelier');
+  let view = $state<'atelier' | 'shelf' | 'print'>('atelier');
   // Chaque jaquette a son identifiant sur l'étagère.
   let projectId = $state(uid());
   let shelfVersion = $state(0);
@@ -299,6 +300,7 @@
     <nav class="nav" aria-label="Sections">
       <button class:on={view === 'atelier'} aria-current={view === 'atelier' ? 'page' : undefined} onclick={() => (view = 'atelier')}>Atelier</button>
       <button class:on={view === 'shelf'} aria-current={view === 'shelf' ? 'page' : undefined} onclick={() => (view = 'shelf')}>Étagère</button>
+      <button class:on={view === 'print'} aria-current={view === 'print' ? 'page' : undefined} onclick={() => ((view = 'print'), (editor.selectedId = null))}>Impression</button>
     </nav>
     <input
       class="title"
@@ -328,6 +330,9 @@
       >Exporter <span aria-hidden="true">▾</span></button>
       {#if exportOpen}
         <div class="menu" role="menu">
+          <button role="menuitem" class="menu-print" onclick={() => ((exportOpen = false), (view = 'print'))}>
+            <strong>Impression personnalisée…</strong><small>Format du papier, planches d'étiquettes, impression directe sur CD, calibrage</small>
+          </button>
           <p class="menu-title">Boîtier</p>
           {#each PDF_MODES as m}
             <button role="menuitem" onclick={() => runExport(m.id)}>
@@ -352,6 +357,10 @@
   {#if view === 'shelf'}
   <div class="shelf-area">
     <Shelf currentId={projectId} version={shelfVersion} onOpen={openFromShelf} onNew={newProject} />
+  </div>
+  {:else if view === 'print'}
+  <div class="shelf-area">
+    <PrintView {notify} />
   </div>
   {:else}
   <aside class="panel sidebar">
@@ -636,6 +645,11 @@
   }
   .menu button:hover {
     background: var(--surface-3);
+  }
+  .menu-print {
+    border-bottom: 1px solid var(--line) !important;
+    border-radius: 6px 6px 0 0 !important;
+    margin-bottom: 2px;
   }
   .menu-title {
     margin: 6px 10px 2px;

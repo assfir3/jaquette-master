@@ -129,8 +129,8 @@
     display: flex;
     align-items: flex-end;
     gap: 5px;
-    padding-top: 16px;
-    padding: 0 12px;
+    /* Place pour la tranche sélectionnée, qui se soulève avec son contour. */
+    padding: 20px 12px 0;
     overflow-x: auto;
   }
   .spine {

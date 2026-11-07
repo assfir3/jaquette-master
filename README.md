@@ -38,7 +38,7 @@ Avec une clé **MobyGames** (`MOBYGAMES_API_KEY` dans `.env.local`), la fiche d'
 
 ## Aperçu 3D
 
-Bouton **3D** au-dessus de la zone de travail : le boîtier et le disque en 3D, mis à jour en direct. On tourne à la souris, vues Face / Tranche / Dos, et **Enregistrer l'image** donne un PNG à partager.
+Vue **Aperçu 3D** sous la zone de travail : un boîtier DVD réaliste (coque noire aux arêtes arrondies, jaquette d'une seule pièce enroulée autour de la tranche, film plastique brillant), mis à jour en direct. **Ouvrir le boîtier** fait pivoter la face sur sa charnière (avec un léger dépassement à l'ouverture et un petit claquement à la fermeture) et montre le disque rangé sur son plot. **Présentation** ouvre et referme le boîtier en boucle pendant que la caméra se balance, et **Vidéo** enregistre un cycle de 7 secondes (MP4, ou WebM selon le navigateur). On tourne à la souris, vues ¾ / Face / Tranche / Dos, et **Enregistrer l'image** donne un PNG à partager.
 
 ## Logos officiels des jeux
 
@@ -46,7 +46,13 @@ La fiche d'un jeu propose automatiquement les logos officiels : celui de Steam, 
 
 ## Logos
 
-Onglet **Logos** : PEGI, boutiques (Steam, GOG, Epic, Ubisoft, Battle.net, itch.io) et plateformes (Windows, Xbox, Linux, Steam Deck), plus une recherche libre sur Wikimedia Commons.
+Onglet **Logos**, rangé en sections dépliables (94 logos) :
+- classifications : PEGI (Europe), USK (Allemagne), ESRB (Amérique du Nord), CERO (Japon), ClassInd (Brésil) ;
+- boutiques : Steam, GOG, Epic, EA, Ubisoft, Battle.net, Rockstar, Microsoft Store, Game Pass, PlayStation Store, Nintendo eShop, Humble, Amazon Games, Green Man Gaming, itch.io ;
+- plateformes : Windows, macOS, Linux, SteamOS, Steam Deck, Android, iOS, Meta Quest, toutes les PlayStation, Xbox, Nintendo, Dreamcast ;
+- supports : DVD, Blu-ray, CD-ROM.
+
+Plus une recherche libre sur Wikimedia Commons. Les pictogrammes de contenu PEGI récents (violence, peur…) n'y sont pas : importe-les dans « Mes logos ».
 Un clic pose le logo à l'endroit habituel (PEGI en bas à gauche de la face, boutiques en rangée au bas du dos, plateforme en bas de la tranche) ; les logos suivants se rangent à côté.
 Chaque image peut être recolorée en blanc, en noir ou dans une teinte au choix (panneau de droite).
 « Mes logos » garde tes propres logos d'un projet à l'autre (stockés dans le navigateur).
@@ -63,6 +69,16 @@ Bouton **Boîtier / Rondelle** au-dessus de la zone de travail : la rondelle est
 ## Étagère
 
 Chaque jaquette se range toute seule sur l'étagère (onglet **Étagère** en haut), avec un aperçu de sa tranche et de sa face, à l'échelle réelle. Un clic la sélectionne, un double-clic ou **Ouvrir dans l'atelier** la rouvre. Les jaquettes sont gardées dans le navigateur : enregistre un fichier `.jaquette.json` pour les garder ailleurs.
+
+## Impression
+
+Onglet **Impression** en haut (ou Exporter › Impression personnalisée…), avec un aperçu de la feuille :
+- **Jaquette** : papier A4, A3, US Letter, US Legal ou format personnalisé (orientation automatique), fond perdu et traits de coupe au choix. Un avertissement s'affiche si la jaquette ne tient pas ou frôle le bord.
+- **Rondelle sur planche ou papier** : papier ordinaire à découper, planches A4 de 2 étiquettes Ø 117 mm (plein visage ou centre 41 mm) ou planche personnalisée (feuille, diamètre, trou, position des étiquettes).
+- **Rondelle directement sur le CD** (Epson, Canon…) : image PNG de 120 mm à 300 dpi, dont la résolution est inscrite dans le fichier pour arriver à la bonne taille dans Epson Print CD ou Easy-PhotoPrint Editor, ou PDF au format exact 120 × 120 mm. Les étapes de chaque logiciel sont rappelées.
+- **Calibrage** : décalage et échelle de l'imprimante, gardés dans le navigateur. La **planche de test** (contours seuls et règle de 100 mm) sert à les régler avant d'utiliser une planche d'étiquettes.
+
+Les positions des planches d'étiquettes du commerce varient d'une marque à l'autre : vérifie-les avec la planche de test.
 
 ## Ce que fait l'éditeur
 
@@ -81,11 +97,17 @@ Chaque jaquette se range toute seule sur l'étagère (onglet **Étagère** en ha
 - `src/lib/export.ts` : rendu 300 dpi, PDF (jsPDF) et PNG.
 - `src/lib/storage.ts` : fichiers projet, étagère et sauvegarde automatique (IndexedDB).
 - `src/lib/Shelf.svelte` : la vue Étagère.
+- `src/lib/print.ts` et `src/lib/PrintView.svelte` : formats de papier, planches d'étiquettes, impression directe sur CD, calibrage.
+- `src/lib/Preview3D.svelte` : le boîtier 3D (Three.js) qui s'ouvre.
 
 ## Prochaines étapes
 
 1. IGDB pour les jeux console (résumé, PEGI, plateformes) et GOG.
-2. Plusieurs styles de mise en page automatique.
-3. Autres formats de boîtier (Blu-ray, Switch).
+2. Autres formats de boîtier (Blu-ray, Switch, CD cristal).
+3. Positions vérifiées des planches d'étiquettes du commerce.
 
-Les visuels des jeux appartiennent à leurs éditeurs : outil destiné à un usage personnel et non commercial.
+## Licence
+
+Code sous licence [MIT](LICENSE).
+
+Les visuels des jeux et les logos appartiennent à leurs éditeurs et ne sont pas livrés avec l'outil : ils sont téléchargés à la demande. Outil destiné à un usage personnel et non commercial.

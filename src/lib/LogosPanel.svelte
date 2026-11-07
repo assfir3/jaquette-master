@@ -166,17 +166,19 @@
     <p class="error">{catalogError}</p>
   {/if}
   {#each CATALOG as section}
-    <h4>{section.title}</h4>
-    <div class="grid">
-      {#each section.entries as entry (entry.file)}
-        {@const f = files?.get(entry.file)}
-        {#if f}
-          {@render tile(entry.file, entry.label, proxied(f.thumb), commonsRef(f, entry.label), entry.zone)}
-        {:else if !files && !catalogError}
-          <div class="tile skeleton"></div>
-        {/if}
-      {/each}
-    </div>
+    <details class="section" open={section.open}>
+      <summary><span>{section.title}</span><small>{section.entries.length}</small></summary>
+      <div class="grid">
+        {#each section.entries as entry (entry.file)}
+          {@const f = files?.get(entry.file)}
+          {#if f}
+            {@render tile(entry.file, entry.label, proxied(f.thumb), commonsRef(f, entry.label), entry.zone)}
+          {:else if !files && !catalogError}
+            <div class="tile skeleton"></div>
+          {/if}
+        {/each}
+      </div>
+    </details>
   {/each}
 
   <p class="hint legal">Logos téléchargés à la demande depuis Wikimedia Commons. Ce sont des marques de leurs propriétaires : usage personnel et non commercial.</p>
@@ -197,6 +199,51 @@
   .bar input {
     flex: 1;
     min-width: 0;
+  }
+  .section {
+    border-top: 1px solid var(--line);
+    padding-top: 2px;
+  }
+  .section summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 0 7px;
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .section summary::-webkit-details-marker {
+    display: none;
+  }
+  .section summary::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 0.15s ease;
+  }
+  .section[open] summary::before {
+    transform: rotate(45deg);
+  }
+  .section summary span {
+    flex: 1;
+  }
+  .section summary small {
+    font-weight: 400;
+  }
+  .section summary:hover {
+    color: var(--text);
+  }
+  .section .grid {
+    padding-bottom: 10px;
   }
   h4 {
     display: flex;

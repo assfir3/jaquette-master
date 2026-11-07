@@ -566,7 +566,7 @@
     border-radius: 8px;
   }
   .pack.fr {
-    border-color: #f5b43166;
+    border-color: #ff5a3c66;
   }
   .pack-head {
     font-size: 11px;

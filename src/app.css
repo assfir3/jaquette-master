@@ -1,13 +1,19 @@
 :root {
-  --bg: #17181c;
-  --surface: #1d1f24;
-  --surface-2: #24262c;
-  --surface-3: #2e3138;
-  --line: #31343b;
-  --text: #e9eaee;
-  --muted: #9a9ea8;
-  --accent: #f5b431;
-  --accent-soft: #f5b43126;
+  --bg: #0d1018;
+  --surface: #121622;
+  --surface-2: #1a1f2c;
+  --surface-3: #252b3a;
+  --line: #252b3a;
+  --line-strong: #2e3546;
+  --text: #f1f2f6;
+  --muted: #a3a9ba;
+  --accent: #ff5a3c;
+  --accent-hover: #ff7a61;
+  --accent-ink: #1a0a05;
+  --accent-soft: #ff5a3c24;
+  --accent-text: #ff8a70;
+  --display: Anton, 'Bebas Neue', Impact, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
   color-scheme: dark;
   font-family: Inter, system-ui, -apple-system, sans-serif;
   font-size: 13px;
@@ -27,9 +33,10 @@ body {
 
 h2 {
   margin: 0 0 2px;
+  font-family: var(--mono);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -57,8 +64,8 @@ textarea {
 
 button {
   background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
   padding: 6px 10px;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
@@ -80,12 +87,13 @@ button:disabled {
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #1b1d22;
-  font-weight: 600;
+  color: var(--accent-ink);
+  font-weight: 700;
 }
 
 button.primary:hover:not(:disabled) {
-  background: #ffc552;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 button.danger:hover {
@@ -150,7 +158,7 @@ input[type='checkbox'] {
 .seg button.on {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
   position: relative;
 }
 

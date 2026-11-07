@@ -35,7 +35,7 @@
   let size = $state({ w: 0, h: 0 });
   let dropPanel = $state<PanelId | null>(null);
 
-  const PAD = 36;
+  const PAD = 44;
   const triedFonts = new Set<string>();
 
   onMount(() => {
@@ -51,9 +51,9 @@
     transformer = new Konva.Transformer({
       rotationSnaps: [0, 90, 180, 270],
       rotationSnapTolerance: 4,
-      borderStroke: '#f5b431',
-      anchorStroke: '#f5b431',
-      anchorFill: '#1b1d22',
+      borderStroke: '#ff5a3c',
+      anchorStroke: '#ff5a3c',
+      anchorFill: '#0d1018',
       anchorSize: 9,
       anchorCornerRadius: 2,
       ignoreStroke: true,
@@ -223,11 +223,11 @@
       new Konva.Rect({ x: -b, y: H, width: W + 2 * b, height: b, fill: veil }),
       new Konva.Rect({ x: -b, y: 0, width: b, height: H, fill: veil }),
       new Konva.Rect({ x: W, y: 0, width: b, height: H, fill: veil }),
-      new Konva.Rect({ x: 0, y: 0, width: W, height: H, stroke: '#f5b431', strokeWidth: px }),
+      new Konva.Rect({ x: 0, y: 0, width: W, height: H, stroke: '#ff5a3c', strokeWidth: px }),
       new Konva.Rect({ x: -b, y: -b, width: W + 2 * b, height: H + 2 * b, stroke: '#ffffff33', strokeWidth: px, dash: [4 * px, 4 * px] }),
     );
     for (const x of [p.spine.x, p.front.x]) {
-      guides.add(new Konva.Line({ points: [x, -b, x, H + b], stroke: '#f5b431', strokeWidth: px, dash: [6 * px, 4 * px] }));
+      guides.add(new Konva.Line({ points: [x, -b, x, H + b], stroke: '#ff5a3c', strokeWidth: px, dash: [6 * px, 4 * px] }));
     }
     for (const id of ['back', 'front'] as const) {
       guides.add(
@@ -237,16 +237,42 @@
         }),
       );
     }
-    const labelY = -b - 16 * px;
+    // Cotes façon plan : nom et largeur de chaque partie, hauteur à droite.
+    const ink = '#a3a9ba';
+    const rule = '#3a4256';
+    const mono = 'JetBrains Mono';
+    const y = -b - 12 * px;
     for (const id of ['back', 'spine', 'front'] as const) {
-      const text = id === 'spine' ? 'TRANCHE' : PANEL_LABELS[id].toUpperCase();
-      const t = new Konva.Text({
-        text, fontSize: 10 * px, fontFamily: 'Inter', fill: '#8b8f99', letterSpacing: 1.5 * px,
-        x: p[id].x + p[id].w / 2 - 50 * px, width: 100 * px, y: labelY, align: 'center', wrap: 'none',
-      });
+      const { x, w } = p[id];
+      const text = id === 'spine' ? mm(w) : `${PANEL_LABELS[id].toUpperCase()} · ${mm(w)}`;
+      const t = new Konva.Text({ text, fontSize: 10 * px, fontFamily: mono, fill: ink, wrap: 'none' });
+      const tw = t.width();
+      t.position({ x: x + w / 2 - tw / 2, y: y - 5 * px });
+      const gap = 6 * px;
+      if (w - tw > 24 * px) {
+        guides.add(
+          new Konva.Line({ points: [x + 2 * px, y, x + w / 2 - tw / 2 - gap, y], stroke: rule, strokeWidth: px }),
+          new Konva.Line({ points: [x + w / 2 + tw / 2 + gap, y, x + w - 2 * px, y], stroke: rule, strokeWidth: px }),
+          new Konva.Line({ points: [x + 2 * px, y - 4 * px, x + 2 * px, y + 4 * px], stroke: rule, strokeWidth: px }),
+          new Konva.Line({ points: [x + w - 2 * px, y - 4 * px, x + w - 2 * px, y + 4 * px], stroke: rule, strokeWidth: px }),
+        );
+      }
       guides.add(t);
     }
+    const xr = W + b + 12 * px;
+    const label = new Konva.Text({ text: `${mm(H)} mm`, fontSize: 10 * px, fontFamily: mono, fill: ink, wrap: 'none', rotation: 90 });
+    const lw = label.width();
+    label.position({ x: xr + 5 * px, y: H / 2 - lw / 2 });
+    guides.add(
+      new Konva.Line({ points: [xr, 2 * px, xr, H / 2 - lw / 2 - 6 * px], stroke: rule, strokeWidth: px }),
+      new Konva.Line({ points: [xr, H / 2 + lw / 2 + 6 * px, xr, H - 2 * px], stroke: rule, strokeWidth: px }),
+      new Konva.Line({ points: [xr - 4 * px, 2 * px, xr + 4 * px, 2 * px], stroke: rule, strokeWidth: px }),
+      new Konva.Line({ points: [xr - 4 * px, H - 2 * px, xr + 4 * px, H - 2 * px], stroke: rule, strokeWidth: px }),
+      label,
+    );
   }
+
+  const mm = (v: number) => (Math.round(v * 10) / 10).toLocaleString('fr-FR');
 
   function drawDiscGuides(geo: Geometry, k: number) {
     const px = 1 / k;
@@ -256,13 +282,13 @@
       new Konva.Circle({ x: c, y: c, radius: d / 2, stroke, strokeWidth: px, dash: dash?.map((v) => v * px) });
     guides.add(
       circle(DISC.size, '#ffffff40', [4, 4]),
-      circle(outer, '#f5b431'),
-      circle(inner, '#f5b431'),
+      circle(outer, '#ff5a3c'),
+      circle(inner, '#ff5a3c'),
       circle(outer - 2 * geo.safe, '#5ec8ff66', [2, 3]),
       circle(inner + 2 * geo.safe, '#5ec8ff66', [2, 3]),
-      new Konva.Circle({ x: c, y: c, radius: DISC.hole / 2, fill: '#17181c', stroke: '#ffffff40', strokeWidth: px }),
+      new Konva.Circle({ x: c, y: c, radius: DISC.hole / 2, fill: '#0d1018', stroke: '#ffffff40', strokeWidth: px }),
       new Konva.Text({
-        text: `RONDELLE · ${outer} / ${inner} mm`, fontSize: 10 * px, fontFamily: 'Inter', fill: '#8b8f99',
+        text: `RONDELLE · ${mm(outer)} / ${mm(inner)} mm`, fontSize: 10 * px, fontFamily: 'JetBrains Mono', fill: '#a3a9ba',
         letterSpacing: 1.5 * px, x: 0, width: geo.W, y: -16 * px, align: 'center', wrap: 'none',
       }),
     );
@@ -322,8 +348,9 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    background:
-      radial-gradient(circle at 50% 40%, #23252b 0%, #17181c 70%);
+    background-color: var(--bg);
+    background-image: radial-gradient(#1c2130 1px, transparent 1px);
+    background-size: 20px 20px;
   }
   .drop-hint {
     position: absolute;
@@ -333,7 +360,8 @@
     z-index: 2;
     pointer-events: none;
     background: var(--accent);
-    color: #1b1d22;
+    color: var(--accent-ink);
+    font-weight: 600;
     padding: 6px 14px;
     border-radius: 999px;
     font-size: 13px;
@@ -344,8 +372,8 @@
     bottom: 10px;
     z-index: 2;
     pointer-events: none;
+    font-family: var(--mono);
     font-size: 11px;
     color: var(--muted);
-    font-variant-numeric: tabular-nums;
   }
 </style>

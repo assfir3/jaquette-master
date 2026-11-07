@@ -271,7 +271,7 @@
   }
   .zones button.def {
     color: var(--accent);
-    border-color: #f5b43166;
+    border-color: #ff5a3c66;
   }
   .zones .rm:hover {
     color: #ff8a80;

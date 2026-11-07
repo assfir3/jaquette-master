@@ -305,7 +305,7 @@
     position: absolute;
     inset: 0;
     z-index: 2;
-    background: radial-gradient(circle at 50% 40%, #2a2d34 0%, #15161a 75%);
+    background: radial-gradient(circle at 50% 40%, #1c2130 0%, #0d1018 75%);
     overflow: hidden;
   }
   .preview :global(canvas) {
@@ -324,7 +324,7 @@
     align-items: center;
     gap: 10px;
     padding: 6px 8px;
-    background: #1d1f24e6;
+    background: #121622e6;
     border: 1px solid var(--line);
     border-radius: 10px;
     white-space: nowrap;

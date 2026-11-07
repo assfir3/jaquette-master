@@ -42,6 +42,25 @@ export async function renderToCanvas(
   return canvas;
 }
 
+/** Petits aperçus de la tranche et de la face pour l'étagère. */
+export async function shelfPreviews(doc: Doc, assets: Map<string, LoadedAsset>): Promise<{ spine: string; front: string }> {
+  const dpi = 90;
+  const canvas = await renderToCanvas(doc, assets, dpi);
+  const geo = geometry(doc);
+  const k = dpi / 25.4;
+  const crop = (x: number, w: number) => {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * k));
+    c.height = Math.round(geo.H * k);
+    c.getContext('2d')!.drawImage(canvas, Math.round((x + geo.bleed) * k), Math.round(geo.bleed * k), c.width, c.height, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.82);
+  };
+  return {
+    spine: crop(geo.panels.spine.x, geo.panels.spine.w),
+    front: crop(geo.panels.front.x, geo.panels.front.w),
+  };
+}
+
 export type PdfMode = 'a4' | 'exact' | 'marks';
 
 export const PDF_MODES: { id: PdfMode; label: string; hint: string }[] = [

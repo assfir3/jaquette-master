@@ -60,6 +60,10 @@ Bouton **Boîtier / Rondelle** au-dessus de la zone de travail : la rondelle est
 - Export **PNG** 300 dpi transparent autour et au centre, à importer dans le logiciel d'impression sur CD (Epson Print CD, Canon…).
 - Export **PDF A4** à taille réelle avec cercles de découpe, pour du papier autocollant.
 
+## Étagère
+
+Chaque jaquette se range toute seule sur l'étagère (onglet **Étagère** en haut), avec un aperçu de sa tranche et de sa face, à l'échelle réelle. Un clic la sélectionne, un double-clic ou **Ouvrir dans l'atelier** la rouvre. Les jaquettes sont gardées dans le navigateur : enregistre un fichier `.jaquette.json` pour les garder ailleurs.
+
 ## Ce que fait l'éditeur
 
 - Gabarit boîtier DVD : 273 × 183 mm (tranche 14 mm réglable), fond perdu 3 mm, marge de sécurité 4 mm.
@@ -67,7 +71,7 @@ Bouton **Boîtier / Rondelle** au-dessus de la zone de travail : la rondelle est
 - Textes (titre face, titre tranche pivoté, résumé au dos), bandes de couleur, calques, aimantation sur les plis et les marges.
 - Indication de la résolution réelle de chaque image à l'impression (dpi).
 - Export : PDF A4 paysage (imprimante maison), PDF avec traits de coupe, PDF format exact, PNG 300 dpi.
-- Projet enregistré dans un fichier `.jaquette.json` (images incluses) + sauvegarde automatique dans le navigateur.
+- Projet enregistré dans un fichier `.jaquette.json` (images incluses) + sauvegarde automatique sur l'étagère du navigateur.
 
 ## Organisation du code
 
@@ -75,7 +79,8 @@ Bouton **Boîtier / Rondelle** au-dessus de la zone de travail : la rondelle est
 - `src/lib/render.ts` : construction de la scène Konva, partagée par l'écran et l'export.
 - `src/lib/editor.svelte.ts` : état de l'éditeur, historique annuler/rétablir.
 - `src/lib/export.ts` : rendu 300 dpi, PDF (jsPDF) et PNG.
-- `src/lib/storage.ts` : fichiers projet et sauvegarde automatique (IndexedDB).
+- `src/lib/storage.ts` : fichiers projet, étagère et sauvegarde automatique (IndexedDB).
+- `src/lib/Shelf.svelte` : la vue Étagère.
 
 ## Prochaines étapes
 

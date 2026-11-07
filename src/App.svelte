@@ -4,10 +4,11 @@
   import Inspector from './lib/Inspector.svelte';
   import SearchPanel from './lib/SearchPanel.svelte';
   import LogosPanel from './lib/LogosPanel.svelte';
+  import Shelf from './lib/Shelf.svelte';
   import { addLogo, type LogoRef } from './lib/logos';
   import { loadVisual } from './lib/search';
   import { editor } from './lib/editor.svelte';
-  import { PDF_MODES, exportDiscPdf, exportDiscPng, exportPdf, exportPng, type PdfMode } from './lib/export';
+  import { PDF_MODES, exportDiscPdf, exportDiscPng, exportPdf, exportPng, shelfPreviews, type PdfMode } from './lib/export';
   import {
     DISC,
     TEMPLATES,
@@ -18,15 +19,19 @@
     newRectLayer,
     newSpineTitle,
     newTextLayer,
+    uid,
     type ClipTarget,
     type Layer,
   } from './lib/model';
   import {
-    autosave,
     download,
     fromProjectFile,
+    getCurrentId,
     loadAutosave,
+    loadFromShelf,
     readAsDataUrl,
+    saveToShelf,
+    setCurrentId,
     slugify,
     toProjectFile,
   } from './lib/storage';
@@ -39,6 +44,11 @@
   let imageTarget = $state<ClipTarget>('front');
   let tab = $state<'search' | 'logos' | 'design'>('search');
   let show3d = $state(false);
+  let view = $state<'atelier' | 'shelf'>('atelier');
+  // Chaque jaquette a son identifiant sur l'étagère.
+  let projectId = $state(uid());
+  let shelfVersion = $state(0);
+  let lastSaved = '';
   let exportOpen = $state(false);
   let busy = $state<string | null>(null);
   let toast = $state<{ text: string; kind: 'info' | 'error' } | null>(null);
@@ -53,25 +63,76 @@
     }, 4500);
   }
 
-  onMount(() => {
-    loadAutosave()
-      .then(async (saved) => {
-        if (saved) {
-          const { doc, assets } = await fromProjectFile(saved);
-          editor.load(doc, assets);
-        }
-      })
-      .catch(() => {})
-      .finally(() => (ready = true));
+  onMount(async () => {
+    try {
+      const id = await getCurrentId();
+      const fromShelf = id ? await loadFromShelf(id) : null;
+      if (id && fromShelf) projectId = id;
+      // Avant l'étagère, une seule jaquette était gardée : elle y entre à la première sauvegarde.
+      const saved = fromShelf ?? (await loadAutosave());
+      if (saved) {
+        const { doc, assets } = await fromProjectFile(saved);
+        editor.load(doc, assets);
+        if (fromShelf) lastSaved = JSON.stringify($state.snapshot(editor.doc));
+      }
+    } catch {
+      // Rien à reprendre.
+    }
+    ready = true;
   });
 
-  // Sauvegarde automatique, une seconde après la dernière modification.
+  // Sauvegarde automatique sur l'étagère, une seconde après la dernière modification.
   $effect(() => {
     const snapshot = $state.snapshot(editor.doc);
+    const id = projectId;
     if (!ready) return;
-    const t = setTimeout(() => autosave(toProjectFile(snapshot, editor.usedAssets())), 1000);
+    const t = setTimeout(() => saveNow(snapshot, id), 1000);
     return () => clearTimeout(t);
   });
+
+  async function saveNow(snapshot = $state.snapshot(editor.doc), id = projectId) {
+    const json = JSON.stringify(snapshot);
+    if (json === lastSaved) return;
+    if (!snapshot.layers.length && !snapshot.disc.layers.length) return;
+    lastSaved = json;
+    const file = toProjectFile(snapshot, editor.usedAssets());
+    const previews = await shelfPreviews(snapshot, editor.assets).catch(() => null);
+    await saveToShelf(
+      {
+        id,
+        title: snapshot.title,
+        updatedAt: Date.now(),
+        spine: previews?.spine,
+        front: previews?.front,
+        spineMm: geometry(snapshot).panels.spine.w,
+      },
+      file,
+    );
+    shelfVersion++;
+  }
+
+  function loadInto(d: Parameters<typeof editor.load>[0], assets: Parameters<typeof editor.load>[1], id: string, saved: boolean) {
+    editor.load(d, assets);
+    projectId = id;
+    lastSaved = saved ? JSON.stringify($state.snapshot(editor.doc)) : '';
+    show3d = false;
+    editor.setSurface('case');
+  }
+
+  async function openFromShelf(id: string) {
+    if (id !== projectId) {
+      await saveNow();
+      const file = await loadFromShelf(id);
+      if (!file) {
+        notify('Jaquette introuvable.', 'error');
+        return;
+      }
+      const { doc, assets } = await fromProjectFile(file);
+      loadInto(doc, assets, id, true);
+      setCurrentId(id);
+    }
+    view = 'atelier';
+  }
 
   async function addImages(files: Blob[], target: ClipTarget) {
     try {
@@ -104,9 +165,11 @@
     addImages(files, imageTarget);
   }
 
-  function newProject() {
-    if ((doc.layers.length || doc.disc.layers.length) && !confirm('Commencer une nouvelle jaquette ? Pense à enregistrer celle-ci avant.')) return;
-    editor.load(newDoc(), []);
+  async function newProject() {
+    // La jaquette en cours reste rangée sur l'étagère.
+    await saveNow();
+    loadInto(newDoc(), [], uid(), false);
+    view = 'atelier';
   }
 
   function saveProject() {
@@ -121,8 +184,10 @@
     if (!file) return;
     try {
       const { doc, assets } = await fromProjectFile(JSON.parse(await file.text()));
-      editor.load(doc, assets);
-      notify(`Projet « ${doc.title || file.name} » ouvert.`);
+      await saveNow();
+      loadInto(doc, assets, uid(), false);
+      view = 'atelier';
+      notify(`Projet « ${doc.title || file.name} » ouvert et rangé sur l'étagère.`);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Fichier illisible.', 'error');
     }
@@ -230,10 +295,11 @@
 
 <div class="app">
   <header class="topbar">
-    <div class="brand">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="6" width="26" height="20" rx="2" fill="#f5b431" /><rect x="14.5" y="6" width="3" height="20" fill="#1b1d22" /></svg>
-      <span>Jaquette Master</span>
-    </div>
+    <div class="brand">Jaquette<span>/</span>Master</div>
+    <nav class="nav" aria-label="Sections">
+      <button class:on={view === 'atelier'} aria-current={view === 'atelier' ? 'page' : undefined} onclick={() => (view = 'atelier')}>Atelier</button>
+      <button class:on={view === 'shelf'} aria-current={view === 'shelf' ? 'page' : undefined} onclick={() => (view = 'shelf')}>Étagère</button>
+    </nav>
     <input
       class="title"
       placeholder="Nom du jeu"
@@ -259,7 +325,7 @@
           exportOpen = !exportOpen;
         }}
         disabled={!!busy}
-      >Exporter ▾</button>
+      >Exporter <span aria-hidden="true">▾</span></button>
       {#if exportOpen}
         <div class="menu" role="menu">
           <p class="menu-title">Boîtier</p>
@@ -283,6 +349,11 @@
     </div>
   </header>
 
+  {#if view === 'shelf'}
+  <div class="shelf-area">
+    <Shelf currentId={projectId} version={shelfVersion} onOpen={openFromShelf} onNew={newProject} />
+  </div>
+  {:else}
   <aside class="panel sidebar">
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected={tab === 'search'} class:on={tab === 'search'} onclick={() => (tab = 'search')}>Recherche</button>
@@ -414,14 +485,10 @@
   </aside>
 
   <main class="stage">
+    <div class="work">
     <Canvas onDropFiles={(files, panel) => addImages(files, panel)} onDropVisual={(url, panel) => addVisual(url, panel)}
       onDropLogo={(ref, panel) => addLogo(ref, panel).catch(() => notify('Logo indisponible.', 'error'))}
     />
-    <div class="surfaces seg" role="tablist" aria-label="Surface à modifier">
-      <button role="tab" aria-selected={!isDisc && !show3d} class:on={!isDisc && !show3d} onclick={() => ((show3d = false), editor.setSurface('case'))}>Boîtier</button>
-      <button role="tab" aria-selected={isDisc && !show3d} class:on={isDisc && !show3d} onclick={() => ((show3d = false), editor.setSurface('disc'))}>Rondelle</button>
-      <button role="tab" aria-selected={show3d} class:on={show3d} onclick={() => ((show3d = true), (editor.selectedId = null))}>3D</button>
-    </div>
     {#if show3d}
       <!-- Chargé à la demande : Three.js n'alourdit pas le démarrage. -->
       {#await import('./lib/Preview3D.svelte') then m}
@@ -439,9 +506,22 @@
         {/if}
       </div>
     {/if}
+    </div>
+    <div class="views" role="tablist" aria-label="Vue">
+      <button role="tab" aria-selected={!isDisc && !show3d} class:on={!isDisc && !show3d} onclick={() => ((show3d = false), editor.setSurface('case'))}>
+        <span class="v-case" aria-hidden="true"><i></i><b></b><i></i></span>Boîtier
+      </button>
+      <button role="tab" aria-selected={isDisc && !show3d} class:on={isDisc && !show3d} onclick={() => ((show3d = false), editor.setSurface('disc'))}>
+        <span class="v-disc" aria-hidden="true"><i></i></span>Rondelle
+      </button>
+      <button role="tab" aria-selected={show3d} class:on={show3d} onclick={() => ((show3d = true), (editor.selectedId = null))}>
+        <span class="v-3d" aria-hidden="true"><i></i></span>Aperçu 3D
+      </button>
+    </div>
   </main>
 
   <Inspector />
+  {/if}
 </div>
 
 <input bind:this={fileInput} type="file" accept="image/*" multiple hidden onchange={onPickImages} />
@@ -458,33 +538,66 @@
   .app {
     display: grid;
     grid-template-columns: 300px 1fr 280px;
-    grid-template-rows: 52px 1fr;
+    grid-template-rows: 56px 1fr;
     height: 100vh;
   }
   .topbar {
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 14px;
+    gap: 14px;
+    padding: 0 16px;
     border-bottom: 1px solid var(--line);
-    background: var(--surface);
+    background: var(--bg);
   }
   .brand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 700;
+    font: 400 21px/1 var(--display);
     letter-spacing: 0.02em;
+    text-transform: uppercase;
     white-space: nowrap;
   }
-  .brand svg {
-    width: 22px;
-    height: 22px;
+  .brand span {
+    color: var(--accent);
+  }
+  .nav {
+    display: flex;
+    align-self: stretch;
+    gap: 2px;
+  }
+  .nav button {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    font-weight: 500;
+    padding: 0 12px;
+    border-bottom: 2px solid transparent;
+  }
+  .nav button:hover:not(:disabled) {
+    background: transparent;
+    color: var(--text);
+  }
+  .nav button.on {
+    color: var(--text);
+    font-weight: 600;
+    border-bottom-color: var(--accent);
   }
   .title {
-    width: min(320px, 30vw);
+    width: min(280px, 26vw);
     font-size: 14px;
+    font-weight: 600;
+  }
+  .topbar :global(input.title:not(:focus)) {
+    background: transparent;
+    border-color: transparent;
+  }
+  .export > button.primary {
+    border-radius: 999px;
+    padding: 7px 18px;
+  }
+  .shelf-area {
+    grid-column: 1 / -1;
+    min-height: 0;
   }
   .spacer {
     flex: 1;
@@ -535,16 +648,70 @@
   .menu button:disabled {
     opacity: 0.4;
   }
-  .surfaces {
-    position: absolute;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 3;
+  .work {
+    position: relative;
+    flex: 1;
+    min-height: 0;
   }
-  .surfaces button {
-    padding: 5px 14px;
+  .views {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 12px 14px;
+    background: var(--bg);
+  }
+  .views button {
+    width: 104px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 6px 7px;
+    border-radius: 12px;
+    border: 2px solid var(--line);
     background: var(--surface);
+    color: #d5d9e3;
+    font-size: 12px;
+  }
+  .views button.on {
+    border-color: var(--accent);
+    color: var(--text);
+    font-weight: 600;
+  }
+  .views span {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .v-case {
+    gap: 1px;
+  }
+  .v-case i {
+    width: 26px;
+    height: 34px;
+    background: #3a4256;
+  }
+  .v-case i:last-child {
+    background: #59627a;
+  }
+  .v-case b {
+    width: 5px;
+    height: 34px;
+    background: #2a3142;
+  }
+  .v-disc i {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--surface) 0 4px, #59627a 4.5px 9px, #3a4256 9.5px);
+  }
+  .v-3d i {
+    width: 24px;
+    height: 34px;
+    background: #59627a;
+    transform: perspective(70px) rotateY(-30deg);
+    box-shadow: -5px 0 0 #2a3142;
   }
   .menu small {
     color: var(--muted);
@@ -558,24 +725,31 @@
   }
   .tabs {
     display: flex;
-    gap: 4px;
-    padding: 3px;
-    margin-bottom: 12px;
-    background: var(--bg);
-    border-radius: 9px;
+    gap: 2px;
+    margin: -14px -14px 14px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--line);
   }
   .tabs button {
     flex: 1;
     white-space: nowrap;
     font-size: 12px;
+    font-weight: 500;
     border: 0;
+    border-radius: 0;
     background: transparent;
     color: var(--muted);
-    padding: 6px;
+    padding: 12px 4px 10px;
+    border-bottom: 2px solid transparent;
+  }
+  .tabs button:hover:not(:disabled) {
+    background: transparent;
+    color: var(--text);
   }
   .tabs button.on {
-    background: var(--surface-3);
     color: var(--text);
+    font-weight: 600;
+    border-bottom-color: var(--accent);
   }
   .tabpanel[hidden] {
     display: none;
@@ -688,11 +862,13 @@
     position: relative;
     min-width: 0;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
   .welcome {
     position: absolute;
     left: 50%;
-    bottom: 28px;
+    bottom: 10px;
     transform: translateX(-50%);
     max-width: 520px;
     text-align: center;
@@ -700,7 +876,9 @@
     color: var(--muted);
   }
   .welcome h1 {
-    font-size: 16px;
+    font: 400 20px/1.2 var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
     color: var(--text);
     margin: 0 0 4px;
   }

@@ -26,14 +26,18 @@ export async function fromProjectFile(data: unknown): Promise<{ doc: Doc; assets
 const DB = 'jaquette-master';
 const STORE = 'autosave';
 const LOGO_STORE = 'logos';
+const SHELF_STORE = 'shelf';
+const PROJECT_STORE = 'projects';
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 2);
+    const req = indexedDB.open(DB, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
       if (!db.objectStoreNames.contains(LOGO_STORE)) db.createObjectStore(LOGO_STORE, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(SHELF_STORE)) db.createObjectStore(SHELF_STORE, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(PROJECT_STORE)) db.createObjectStore(PROJECT_STORE);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -133,3 +137,87 @@ export async function listUserLogos(): Promise<UserLogo[]> {
 
 export const saveUserLogo = (logo: UserLogo) => logoTx('readwrite', (s) => s.put(logo));
 export const deleteUserLogo = (id: string) => logoTx('readwrite', (s) => s.delete(id));
+
+// ---------- Étagère : toutes les jaquettes gardées dans le navigateur ----------
+
+/** Ce que l'étagère affiche d'une jaquette, sans ses images (léger à lister). */
+export interface ShelfEntry {
+  id: string;
+  title: string;
+  updatedAt: number;
+  /** Aperçus en JPEG : la tranche et la face avant. */
+  spine?: string;
+  front?: string;
+  /** Largeur de la tranche en mm, pour dessiner l'étagère à l'échelle. */
+  spineMm: number;
+}
+
+async function tx<T>(stores: string[], mode: IDBTransactionMode, fn: (t: IDBTransaction) => IDBRequest<T> | void): Promise<T> {
+  const db = await openDb();
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      const t = db.transaction(stores, mode);
+      const req = fn(t);
+      let result: T;
+      if (req) req.onsuccess = () => (result = req.result);
+      t.oncomplete = () => resolve(result);
+      t.onerror = () => reject(t.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export async function listShelf(): Promise<ShelfEntry[]> {
+  try {
+    const all = await tx([SHELF_STORE], 'readonly', (t) => t.objectStore(SHELF_STORE).getAll() as IDBRequest<ShelfEntry[]>);
+    return (all ?? []).sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
+}
+
+export async function saveToShelf(entry: ShelfEntry, project: ProjectFile): Promise<void> {
+  try {
+    await tx([SHELF_STORE, PROJECT_STORE, STORE], 'readwrite', (t) => {
+      t.objectStore(SHELF_STORE).put(entry);
+      t.objectStore(PROJECT_STORE).put(project, entry.id);
+      t.objectStore(STORE).put(entry.id, 'currentId');
+    });
+  } catch {
+    // Stockage bloqué : on continue sans étagère.
+  }
+}
+
+export async function loadFromShelf(id: string): Promise<ProjectFile | null> {
+  try {
+    return (await tx([PROJECT_STORE], 'readonly', (t) => t.objectStore(PROJECT_STORE).get(id) as IDBRequest<ProjectFile>)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteFromShelf(id: string): Promise<void> {
+  await tx([SHELF_STORE, PROJECT_STORE], 'readwrite', (t) => {
+    t.objectStore(SHELF_STORE).delete(id);
+    t.objectStore(PROJECT_STORE).delete(id);
+  });
+}
+
+export async function getCurrentId(): Promise<string | null> {
+  try {
+    return (await tx([STORE], 'readonly', (t) => t.objectStore(STORE).get('currentId') as IDBRequest<string>)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setCurrentId(id: string): Promise<void> {
+  try {
+    await tx([STORE], 'readwrite', (t) => {
+      t.objectStore(STORE).put(id, 'currentId');
+    });
+  } catch {
+    // ignoré
+  }
+}

@@ -28,7 +28,7 @@
   let disposables: { dispose(): void }[] = [];
 
   onMount(() => {
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, logarithmicDepthBuffer: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -44,7 +44,7 @@
     key.position.set(-200, 300, 400);
     scene.add(key, new THREE.AmbientLight(0xffffff, 0.25));
 
-    camera = new THREE.PerspectiveCamera(32, 1, 1, 5000);
+    camera = new THREE.PerspectiveCamera(32, 1, 20, 4000);
     camera.position.set(170, 60, 470);
 
     controls = new OrbitControls(camera, renderer.domElement);
@@ -180,20 +180,25 @@
             roughness: 0.45,
             clearcoat: 1,
             clearcoatRoughness: 0.12,
+            // La jaquette est presque collée au boîtier : on la force devant
+            // pour éviter que le plastique noir « traverse » l'image.
+            polygonOffset: true,
+            polygonOffsetFactor: -4,
+            polygonOffsetUnits: -4,
           }),
         );
       const plane = (w: number, h: number) => track(new THREE.PlaneGeometry(w, h));
       const coverX = -W2 + pw / 2 + 0.6;
 
       const front = new THREE.Mesh(plane(pw, H), coverMaterial(crop(flat, b + geo.panels.front.x, b, pw, H, k)));
-      front.position.set(coverX, 0, s / 2 + 0.06);
+      front.position.set(coverX, 0, s / 2 + 0.3);
 
       const back = new THREE.Mesh(plane(pw, H), coverMaterial(crop(flat, b, b, pw, H, k)));
-      back.position.set(coverX, 0, -s / 2 - 0.06);
+      back.position.set(coverX, 0, -s / 2 - 0.3);
       back.rotation.y = Math.PI;
 
       const spine = new THREE.Mesh(plane(s, H), coverMaterial(crop(flat, b + geo.panels.spine.x, b, s, H, k)));
-      spine.position.set(-W2 - 0.06, 0, 0);
+      spine.position.set(-W2 - 0.3, 0, 0);
       spine.rotation.y = -Math.PI / 2;
 
       caseGroup.add(front, back, spine);
@@ -224,9 +229,19 @@
       if (discFlat) {
         const print = new THREE.Mesh(
           ring,
-          track(new THREE.MeshPhysicalMaterial({ map: texture(discFlat), transparent: true, roughness: 0.5, clearcoat: 0.3 })),
+          track(
+            new THREE.MeshPhysicalMaterial({
+              map: texture(discFlat),
+              transparent: true,
+              roughness: 0.5,
+              clearcoat: 0.3,
+              polygonOffset: true,
+              polygonOffsetFactor: -4,
+              polygonOffsetUnits: -4,
+            }),
+          ),
         );
-        print.position.z = 0.05;
+        print.position.z = 0.2;
         discGroup.add(print);
       }
       layout();

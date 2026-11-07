@@ -107,6 +107,16 @@
           </div>
           <input type="color" value={l.tint ?? '#ffffff'} oninput={(e) => editor.updateLayer(l.id, { tint: str(e) }, `${l.id}:tint`)} title="Teinte personnalisée" />
         </div>
+        <label>Coins arrondis
+          <input type="range" min="0" max="10" step="0.5" value={l.cornerRadius ?? 0} oninput={(e) => editor.updateLayer(l.id, { cornerRadius: num(e) }, `${l.id}:radius`)} />
+        </label>
+        <div class="row">
+          <label class="check"><input type="checkbox" checked={!!l.borderWidth} onchange={() => editor.updateLayer(l.id, { borderWidth: l.borderWidth ? 0 : 0.4, borderColor: l.borderColor ?? '#ffffff' })} />Cadre</label>
+          {#if l.borderWidth}
+            <input type="color" value={l.borderColor ?? '#ffffff'} oninput={(e) => editor.updateLayer(l.id, { borderColor: str(e) }, `${l.id}:border`)} title="Couleur du cadre" />
+          {/if}
+          <label class="check"><input type="checkbox" checked={!!l.shadow} onchange={() => editor.updateLayer(l.id, { shadow: !l.shadow })} />Ombre</label>
+        </div>
         <p class="dpi" class:bad={dpi < 150} class:ok={dpi >= 250}>
           {asset.width} × {asset.height} px · <strong>{dpi} dpi</strong> à l'impression
           {#if dpi < 150}<br />Image trop petite : le rendu sera flou.{:else if dpi < 250}<br />Correct, un peu doux à l'impression.{/if}
@@ -160,8 +170,11 @@
       <section>
         <h3>Couleur</h3>
         <div class="row">
-          <input type="color" value={l.fill} oninput={(e) => editor.updateLayer(l.id, { fill: str(e) }, `${l.id}:fill`)} />
-          <code>{l.fill}</code>
+          <input type="color" value={l.fill} oninput={(e) => editor.updateLayer(l.id, { fill: str(e), gradient: undefined }, `${l.id}:fill`)} />
+          <code>{l.gradient ? 'Dégradé' : l.fill}</code>
+          {#if l.gradient}
+            <button onclick={() => editor.updateLayer(l.id, { gradient: undefined })}>Couleur unie</button>
+          {/if}
         </div>
         <label>Arrondi des coins
           <input type="range" min="0" max="20" step="0.5" value={l.cornerRadius} oninput={(e) => editor.updateLayer(l.id, { cornerRadius: num(e) }, `${l.id}:radius`)} />

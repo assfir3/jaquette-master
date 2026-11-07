@@ -24,6 +24,18 @@ cp .env.example .env.local   # puis colle la clé dans STEAMGRIDDB_API_KEY
 
 Les requêtes passent par un petit serveur intermédiaire (`server/api.ts`, monté sur `/api` par Vite) qui garde la clé secrète et télécharge les images pour qu'elles restent exportables. Le même code pourra tourner sur un Cloudflare Worker (`server/worker.ts`).
 
+## Modèles de mise en page
+
+Dans la fiche d'un jeu, choisis un modèle avant **Créer la jaquette automatiquement** :
+- **Affiche** : grand visuel en haut du dos qui se fond dans la couleur du jeu ;
+- **Bandeau PC** : bandeau clair en haut (texte modifiable, « PC DVD-ROM » par défaut), façon boîte PC des années 2000 ;
+- **Épuré** : fond uni, texte centré, mosaïque de captures ;
+- **Magazine** : bannière en haut, captures en colonne, texte à côté.
+
+## Jaquettes officielles du commerce (MobyGames)
+
+Avec une clé **MobyGames** (`MOBYGAMES_API_KEY` dans `.env.local`), la fiche d'un jeu liste les éditions scannées par pays, éditions françaises en premier. « Utiliser cette édition » pose la vraie face, le vrai dos et le disque. Sans clé, cette partie est simplement masquée. Usage personnel uniquement ; l'usage commercial demande l'accord de MobyGames.
+
 ## Aperçu 3D
 
 Bouton **3D** au-dessus de la zone de travail : le boîtier et le disque en 3D, mis à jour en direct. On tourne à la souris, vues Face / Tranche / Dos, et **Enregistrer l'image** donne un PNG à partager.

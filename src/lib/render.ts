@@ -48,14 +48,37 @@ function makeNode(l: Layer, assets: Map<string, LoadedAsset>): Konva.Shape {
       if (!a) {
         return new Konva.Rect({ ...common, width: l.width, height: l.height, fill: '#ff00ff55' });
       }
-      return new Konva.Image({ ...common, image: l.tint ? tinted(a, l.tint) : a.img, width: l.width, height: l.height });
+      const src = l.tint ? tinted(a, l.tint) : a.img;
+      // Taille réelle de la source (un SVG sans taille déclarée renvoie 0).
+      const sw = l.tint ? src.width : a.width;
+      const sh = l.tint ? src.height : a.height;
+      return new Konva.Image({
+        ...common,
+        image: src,
+        width: l.width,
+        height: l.height,
+        crop: l.crop
+          ? { x: l.crop.x * sw, y: l.crop.y * sh, width: l.crop.width * sw, height: l.crop.height * sh }
+          : undefined,
+        cornerRadius: l.cornerRadius ?? 0,
+        stroke: l.borderWidth ? l.borderColor ?? '#ffffff' : undefined,
+        strokeWidth: l.borderWidth ?? 0,
+        shadowEnabled: !!l.shadow,
+        shadowColor: '#000000',
+        shadowBlur: 3,
+        shadowOffset: { x: 0.6, y: 0.8 },
+        shadowOpacity: 0.55,
+      });
     }
     case 'rect':
       return new Konva.Rect({
         ...common,
         width: l.width,
         height: l.height,
-        fill: l.fill,
+        fill: l.gradient ? undefined : l.fill,
+        fillLinearGradientStartPoint: l.gradient ? { x: 0, y: 0 } : undefined,
+        fillLinearGradientEndPoint: l.gradient ? { x: 0, y: l.height } : undefined,
+        fillLinearGradientColorStops: l.gradient ? [0, l.gradient.from, 1, l.gradient.to] : undefined,
         cornerRadius: l.cornerRadius,
       });
     case 'text':

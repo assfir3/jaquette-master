@@ -33,6 +33,13 @@ export interface ImageLayer extends LayerBase {
   assetId: string;
   /** Recolore l'image d'une seule teinte (logo blanc sur fond sombre…). */
   tint?: string;
+  /** Partie de l'image affichée, en fractions (0–1) de sa largeur et hauteur. */
+  crop?: { x: number; y: number; width: number; height: number };
+  cornerRadius?: number;
+  /** Cadre autour de l'image (épaisseur en mm, 0 = aucun). */
+  borderColor?: string;
+  borderWidth?: number;
+  shadow?: boolean;
 }
 
 export interface TextLayer extends LayerBase {
@@ -59,6 +66,8 @@ export interface RectLayer extends LayerBase {
   type: 'rect';
   fill: string;
   cornerRadius: number;
+  /** Dégradé vertical du haut vers le bas ; remplace `fill` quand il est présent. */
+  gradient?: { from: string; to: string };
 }
 
 export type Layer = ImageLayer | TextLayer | RectLayer;
@@ -373,4 +382,22 @@ export function newRectLayer(geo: Geometry, target: ClipTarget): RectLayer {
 /** Résolution réelle d'une image une fois imprimée à sa taille. */
 export function effectiveDpi(asset: Asset, layer: { width: number }): number {
   return Math.round(asset.width / (layer.width / 25.4));
+}
+
+/** Recadrage qui remplit une case de proportions w × h (centré, comme « couvrir »). */
+export function coverCrop(iw: number, ih: number, w: number, h: number): ImageLayer['crop'] {
+  const target = w / h;
+  const ratio = iw / ih;
+  if (ratio > target) {
+    const width = target / ratio;
+    return { x: (1 - width) / 2, y: 0, width, height: 1 };
+  }
+  const height = ratio / target;
+  return { x: 0, y: (1 - height) / 2, width: 1, height };
+}
+
+/** Couleur hexadécimale avec transparence, au format rgba(). */
+export function rgba(hex: string, alpha: number): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }

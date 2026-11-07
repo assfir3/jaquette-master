@@ -1,17 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { autoDiscLayout, autoLayout } from './autolayout';
+  import { TEMPLATE_STYLES, buildTemplate, type TemplateStyle } from './templates';
   import { editor } from './editor.svelte';
   import { coverRect, geometry, newImageLayer, newTextLayer, PANEL_LABELS, type ClipTarget } from './model';
   import { placeLogo } from './logos';
   import {
     VISUAL_MIME,
+    findMoby,
+    getCoverPacks,
     getGame,
     getStatus,
     loadVisual,
     proxied,
     searchGames,
+    type CoverPack,
     type GameDetails,
+    type MobyGame,
     type SearchResult,
     type Visual,
   } from './search';
@@ -41,10 +45,25 @@
   let broken = $state<Record<string, true>>({});
   let placing = $state<string | null>(null);
 
+  // Modèle de mise en page.
+  let style = $state<TemplateStyle>('affiche');
+  let platform = $state('PC DVD-ROM');
+
+  // Jaquettes officielles scannées (MobyGames, clé facultative).
+  let hasMoby = $state(false);
+  let moby = $state<MobyGame | null>(null);
+  let mobyPlatform = $state<number | null>(null);
+  let packs = $state<CoverPack[]>([]);
+  let loadingPacks = $state(false);
+  let mobyError = $state<string | null>(null);
+
   onMount(() => {
     if (!query && editor.doc.title) query = editor.doc.title;
     getStatus()
-      .then((s) => (hasSgdb = s.steamgriddb))
+      .then((s) => {
+        hasSgdb = s.steamgriddb;
+        hasMoby = s.mobygames;
+      })
       .catch(() => {});
   });
 
@@ -78,6 +97,10 @@
       shotUrls = g.screenshots.slice(0, 3).map((s) => s.url);
       studioUrl = g.studios?.[0]?.url ?? null;
       summary = g.summary;
+      moby = null;
+      packs = [];
+      mobyError = null;
+      if (hasMoby) loadMoby(g.name);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Fiche introuvable';
     } finally {
@@ -107,37 +130,71 @@
     return parts.join('  ·  ');
   }
 
-  async function build() {
+  async function loadMoby(title: string) {
+    try {
+      moby = await findMoby(title);
+      mobyPlatform = moby?.platforms[0]?.id ?? null;
+      if (moby && mobyPlatform) await loadPacks(mobyPlatform);
+    } catch (err) {
+      mobyError = err instanceof Error ? err.message : 'MobyGames indisponible';
+    }
+  }
+
+  async function loadPacks(platformId: number) {
+    if (!moby) return;
+    mobyPlatform = platformId;
+    loadingPacks = true;
+    mobyError = null;
+    try {
+      packs = await getCoverPacks(moby.id, platformId);
+    } catch (err) {
+      packs = [];
+      mobyError = err instanceof Error ? err.message : 'Scans indisponibles';
+    } finally {
+      loadingPacks = false;
+    }
+  }
+
+  /** Crée la jaquette avec le modèle choisi (ou les scans officiels d'une édition). */
+  async function build(pack?: CoverPack) {
     if (!game) return;
     if ((editor.doc.layers.length || editor.doc.disc.layers.length) && !confirm('Remplacer la jaquette et la rondelle actuelles par une mise en page automatique ? (⌘Z pour revenir en arrière)')) return;
     building = true;
     try {
-      const load = (url: string | null) => (url && !broken[url] ? loadVisual(url).catch(() => undefined) : Promise.resolve(undefined));
-      const [cover, hero, logo, studio, ...shots] = await Promise.all([
+      const load = (url: string | null | undefined) => (url && !broken[url] ? loadVisual(url).catch(() => undefined) : Promise.resolve(undefined));
+      const [cover, hero, logo, studio, oFront, oBack, oSpine, oMedia, ...shots] = await Promise.all([
         load(coverUrl),
         load(heroUrl),
         load(logoUrl),
         load(studioUrl),
+        load(pack?.front?.url),
+        load(pack?.back?.url),
+        load(pack?.spine?.url),
+        load(pack?.media?.url),
         ...shotUrls.map((u) => load(u)),
       ]);
       const g = game;
       const input = {
         name: g.name,
         year: g.year,
+        genres: g.genres,
         summary: summary.trim(),
         credits: credits(g),
+        platform: platform.trim() || 'PC',
         cover,
         hero,
         logo,
         screenshots: shots.filter((s) => !!s),
+        official: pack ? { front: oFront, back: oBack, spine: oSpine, media: oMedia } : undefined,
       };
-      const layers = autoLayout(editor.doc, input);
-      const disc = autoDiscLayout(editor.doc, input);
-      if (studio) {
-        // Logo du studio en blanc, rangé en bas du dos.
+      const result = buildTemplate(editor.doc, pack ? 'officiel' : style, input);
+      const layers = result.layers;
+      const disc = result.disc;
+      // Le dos officiel a déjà ses logos : on n'ajoute le studio que sur nos modèles.
+      if (studio && !pack?.back) {
         const label = game.studios.find((s) => s.url === studioUrl)?.label ?? 'Studio';
         editor.setSurface('case');
-        layers.push({ ...placeLogo(geometry(editor.doc), layers, studio, 'back', label), tint: '#ffffff' });
+        layers.push({ ...placeLogo(geometry(editor.doc), layers, studio, 'back', label), tint: result.logoTint });
       }
       editor.update((d) => {
         d.title = g.name;
@@ -237,9 +294,60 @@
       <h3>{game.name}</h3>
       <p class="meta">{credits(game)}{#if game.pegi} · PEGI {game.pegi}{/if}</p>
 
-      <button class="primary build" onclick={build} disabled={building}>
+      <h4>Modèle</h4>
+      <div class="styles" role="radiogroup" aria-label="Modèle de mise en page">
+        {#each TEMPLATE_STYLES as t}
+          <button role="radio" aria-checked={style === t.id} class="style" class:on={style === t.id} onclick={() => (style = t.id)} title={t.hint}>
+            <span class="mini mini-{t.id}" aria-hidden="true"><i></i><b></b><u></u><s></s></span>
+            <span>{t.name}</span>
+          </button>
+        {/each}
+      </div>
+      {#if style === 'bandeau'}
+        <label class="plat">Texte du bandeau <input bind:value={platform} /></label>
+      {/if}
+      <button class="primary build" onclick={() => build()} disabled={building}>
         {building ? 'Téléchargement des visuels…' : '✦ Créer la jaquette automatiquement'}
       </button>
+
+      <h4>Jaquettes officielles du commerce</h4>
+      {#if !hasMoby}
+        <p class="note">
+          Pour retrouver les vraies jaquettes françaises (face, dos et disque scannés), ajoute une clé
+          <strong>MobyGames</strong> dans <code>.env.local</code> (<code>MOBYGAMES_API_KEY</code>).
+        </p>
+      {:else if mobyError}
+        <p class="error">{mobyError}</p>
+      {:else if !moby}
+        <p class="hint">Recherche sur MobyGames…</p>
+      {:else}
+        {#if moby.platforms.length > 1}
+          <div class="row">
+            {#each moby.platforms as p}
+              <button class="chip" class:on={mobyPlatform === p.id} onclick={() => loadPacks(p.id)}>{p.name}</button>
+            {/each}
+          </div>
+        {/if}
+        {#if loadingPacks}
+          <p class="hint">Chargement des scans…</p>
+        {:else if !packs.length}
+          <p class="hint">Aucun scan de boîte pour cette plateforme.</p>
+        {:else}
+          {#each packs.slice(0, 6) as pk}
+            <div class="pack" class:fr={pk.french}>
+              <div class="pack-head">
+                <span>{pk.countries.includes('France') ? '🇫🇷 ' : ''}{pk.label}</span>
+              </div>
+              <div class="pack-imgs">
+                {#each [pk.front, pk.back, pk.media].filter((v) => !!v) as v}
+                  <img src={proxied(v!.thumb)} alt={v!.label ?? ''} title={v!.label ?? ''} loading="lazy" />
+                {/each}
+              </div>
+              <button onclick={() => build(pk)} disabled={building || (!pk.front && !pk.back)}>Utiliser cette édition</button>
+            </div>
+          {/each}
+        {/if}
+      {/if}
       <p class="hint">Clique sur un visuel pour le choisir, ou glisse-le directement sur la jaquette.</p>
 
       {#if game.covers.length}
@@ -385,6 +493,95 @@
     border: 0;
     padding: 0;
     color: var(--muted);
+  }
+  .styles {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .style {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 2px;
+    font-size: 11px;
+  }
+  .style.on {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  /* Miniatures schématiques du dos de chaque modèle. */
+  .mini {
+    position: relative;
+    width: 34px;
+    height: 46px;
+    border-radius: 2px;
+    background: #2b2e36;
+    overflow: hidden;
+  }
+  .mini i, .mini b, .mini u, .mini s {
+    position: absolute;
+    display: block;
+    text-decoration: none;
+  }
+  .mini-affiche i { inset: 0 0 50% 0; background: linear-gradient(#c9853a, #2b2e36); }
+  .mini-affiche b { left: 5px; right: 5px; top: 26px; height: 6px; background: repeating-linear-gradient(#aaa 0 1px, transparent 1px 2.5px); }
+  .mini-affiche u { left: 4px; right: 4px; bottom: 6px; height: 5px; background: linear-gradient(90deg, #6b8fd6 30%, transparent 30% 35%, #6b8fd6 35% 65%, transparent 65% 70%, #6b8fd6 70%); }
+  .mini-bandeau i { left: 0; right: 0; top: 0; height: 6px; background: #f0f0ee; }
+  .mini-bandeau b { left: 0; right: 0; top: 6px; height: 12px; background: #c9853a; }
+  .mini-bandeau u { left: 18px; right: 3px; top: 21px; height: 16px; background: linear-gradient(#6b8fd6 45%, transparent 45% 55%, #6b8fd6 55%); }
+  .mini-bandeau s { left: 0; right: 0; bottom: 0; height: 5px; background: #f0f0ee; }
+  .mini-epure b { left: 9px; right: 9px; top: 5px; height: 4px; background: #ddd; }
+  .mini-epure i { left: 5px; right: 5px; top: 13px; height: 8px; background: repeating-linear-gradient(#aaa 0 1px, transparent 1px 2.5px); }
+  .mini-epure u { left: 4px; width: 17px; top: 26px; height: 11px; background: #6b8fd6; }
+  .mini-epure s { left: 23px; right: 4px; top: 26px; height: 11px; background: linear-gradient(#6b8fd6 45%, transparent 45% 55%, #6b8fd6 55%); }
+  .mini-magazine i { left: 0; right: 0; top: 0; height: 13px; background: linear-gradient(#c9853a, #2b2e36); }
+  .mini-magazine b { left: 3px; width: 14px; top: 16px; height: 24px; background: linear-gradient(#6b8fd6 28%, transparent 28% 36%, #6b8fd6 36% 64%, transparent 64% 72%, #6b8fd6 72%); }
+  .mini-magazine u { left: 20px; right: 3px; top: 17px; height: 18px; background: repeating-linear-gradient(#aaa 0 1px, transparent 1px 2.5px); }
+  .plat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .chip {
+    padding: 3px 8px;
+    font-size: 11px;
+    border-radius: 999px;
+  }
+  .chip.on {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .pack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    margin-top: 6px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .pack.fr {
+    border-color: #f5b43166;
+  }
+  .pack-head {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .pack-imgs {
+    display: flex;
+    gap: 4px;
+  }
+  .pack-imgs img {
+    height: 70px;
+    max-width: 33%;
+    object-fit: contain;
+    border-radius: 3px;
+    background: var(--bg);
   }
   .build {
     width: 100%;

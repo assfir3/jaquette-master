@@ -5,6 +5,7 @@
 
 export interface Env {
   STEAMGRIDDB_API_KEY?: string;
+  MOBYGAMES_API_KEY?: string;
 }
 
 export interface Visual {
@@ -12,7 +13,7 @@ export interface Visual {
   thumb: string;
   width?: number;
   height?: number;
-  source: 'steam' | 'steamgriddb' | 'wikimedia';
+  source: 'steam' | 'steamgriddb' | 'wikimedia' | 'mobygames';
   /** Logo officiel (fourni par l'éditeur), par opposition à une création de fan. */
   official?: boolean;
   label?: string;
@@ -58,6 +59,7 @@ const IMAGE_HOSTS = [
   /^steamcdn-a\.akamaihd\.net$/,
   /(^|\.)steamgriddb\.com$/,
   /^(upload|thumb)\.wikimedia\.org$/,
+  /^cdn\.mobygames\.com$/,
 ];
 
 export async function handleApi(req: Request, env: Env): Promise<Response | null> {
@@ -65,7 +67,11 @@ export async function handleApi(req: Request, env: Env): Promise<Response | null
   if (!url.pathname.startsWith('/api/')) return null;
   try {
     const path = url.pathname.slice(5);
-    if (path === 'status') return json({ steam: true, steamgriddb: !!env.STEAMGRIDDB_API_KEY });
+    if (path === 'status')
+      return json({ steam: true, steamgriddb: !!env.STEAMGRIDDB_API_KEY, mobygames: !!env.MOBYGAMES_API_KEY });
+    if (path === 'moby/find') return json(await mobyFind(url.searchParams.get('title') ?? '', env));
+    if (path === 'moby/covers')
+      return json(await mobyCovers(url.searchParams.get('game') ?? '', url.searchParams.get('platform') ?? '', env));
     if (path === 'search') return json(await search(url.searchParams.get('q') ?? '', env));
     const game = path.match(/^game\/(steam|steamgriddb)\/(\d+)$/);
     if (game) {
@@ -466,4 +472,111 @@ async function studioLogos(names: string[]): Promise<Visual[]> {
   );
   const seen = new Set<string>();
   return results.flat().filter((v) => !seen.has(v.url) && seen.add(v.url));
+}
+
+// ---------- Jaquettes officielles scannées (MobyGames) ----------
+// MobyGames classe les scans par pays (France…) et par type (face, dos, disque).
+// Clé personnelle obligatoire ; usage commercial soumis à leur accord.
+
+const MOBY = 'https://api.mobygames.com/v1';
+let lastMobyCall = 0;
+
+/** MobyGames limite à environ une requête par seconde : on espace les appels. */
+async function mobyGet<T>(path: string, env: Env): Promise<T> {
+  if (!env.MOBYGAMES_API_KEY) throw new Error('Clé MobyGames absente');
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${MOBY}${path}${sep}api_key=${encodeURIComponent(env.MOBYGAMES_API_KEY)}`;
+  if (!cache.has(url)) {
+    const wait = lastMobyCall + 1100 - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastMobyCall = Date.now();
+  }
+  return getJson<T>(url);
+}
+
+export interface MobyGame {
+  id: number;
+  title: string;
+  platforms: { id: number; name: string }[];
+}
+
+async function mobyFind(title: string, env: Env): Promise<MobyGame | null> {
+  title = title.replace(/[™®©]/g, '').trim();
+  if (title.length < 2) return null;
+  const data = await mobyGet<{ games?: { game_id: number; title: string }[] }>(
+    `/games?title=${encodeURIComponent(title)}&format=brief&limit=10`,
+    env,
+  );
+  const games = data.games ?? [];
+  const key = normalize(title);
+  const best = games.find((g) => normalize(g.title) === key) ?? games[0];
+  if (!best) return null;
+  const p = await mobyGet<{ platforms?: { platform_id: number; platform_name: string }[] }>(`/games/${best.game_id}/platforms`, env);
+  // Windows d'abord : c'est le cas le plus courant pour les jeux dématérialisés.
+  const platforms = (p.platforms ?? [])
+    .map((x) => ({ id: x.platform_id, name: x.platform_name }))
+    .sort((a, b) => Number(b.name === 'Windows') - Number(a.name === 'Windows'));
+  return { id: best.game_id, title: best.title, platforms };
+}
+
+export interface CoverPack {
+  label: string;
+  countries: string[];
+  french: boolean;
+  front?: Visual;
+  back?: Visual;
+  spine?: Visual;
+  media?: Visual;
+  others: (Visual & { label: string })[];
+}
+
+interface MobyCover {
+  scan_of: string;
+  image: string;
+  thumbnail_image?: string;
+  width: number;
+  height: number;
+}
+
+const FRENCH = ['France', 'Belgium', 'Switzerland', 'Canada', 'Luxembourg'];
+
+async function mobyCovers(game: string, platform: string, env: Env): Promise<CoverPack[]> {
+  if (!/^\d+$/.test(game) || !/^\d+$/.test(platform)) throw new Error('Paramètres invalides');
+  const data = await mobyGet<{ cover_groups?: { comments?: string | null; countries?: string[]; covers?: MobyCover[] }[] }>(
+    `/games/${game}/platforms/${platform}/covers`,
+    env,
+  );
+  const visual = (c: MobyCover): Visual => ({
+    url: c.image,
+    thumb: c.thumbnail_image ?? c.image,
+    width: c.width,
+    height: c.height,
+    source: 'mobygames',
+    official: true,
+    label: c.scan_of,
+  });
+  const packs = (data.cover_groups ?? []).map((g): CoverPack => {
+    const covers = g.covers ?? [];
+    const find = (re: RegExp) => covers.find((c) => re.test(c.scan_of));
+    const used = new Set<MobyCover>();
+    const take = (re: RegExp) => {
+      const c = find(re);
+      if (c) used.add(c);
+      return c ? visual(c) : undefined;
+    };
+    const countries = g.countries ?? [];
+    return {
+      label: [countries.join(', '), g.comments].filter(Boolean).join(' — ') || 'Édition',
+      countries,
+      french: countries.some((c) => FRENCH.includes(c)),
+      front: take(/^front cover$/i),
+      back: take(/^back cover$/i),
+      spine: take(/spine|sides/i),
+      media: take(/^media$/i),
+      others: covers.filter((c) => !used.has(c)).map((c) => ({ ...visual(c), label: c.scan_of })),
+    };
+  });
+  // Éditions françaises d'abord, puis celles qui ont face et dos.
+  const score = (p: CoverPack) => (p.countries.includes('France') ? 4 : 0) + (p.french ? 2 : 0) + (p.front && p.back ? 1 : 0);
+  return packs.sort((a, b) => score(b) - score(a));
 }

@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import { PT_TO_MM, clipRect, type Geometry, type Layer } from './model';
+import { PT_TO_MM, clipRect, type Geometry, type Gradient, type Layer, type RectLayer } from './model';
 
 export interface LoadedAsset {
   id: string;
@@ -33,6 +33,86 @@ function tinted(a: LoadedAsset, color: string): HTMLCanvasElement {
 
 export function fontStyle(l: { bold: boolean; italic: boolean }): string {
   return [l.italic ? 'italic' : '', l.bold ? 'bold' : ''].filter(Boolean).join(' ') || 'normal';
+}
+
+/** Propriétés Konva d'un dégradé appliqué à une boîte de w × h mm. */
+export function gradientFill(g: Gradient, w: number, h: number): Konva.ShapeConfig {
+  const stops = g.via ? [0, g.from, 0.5, g.via, 1, g.to] : [0, g.from, 1, g.to];
+  const c = { x: w / 2, y: h / 2 };
+  if (g.kind === 'radial') {
+    return {
+      fillPriority: 'radial-gradient',
+      fillRadialGradientStartPoint: c,
+      fillRadialGradientEndPoint: c,
+      fillRadialGradientStartRadius: 0,
+      fillRadialGradientEndRadius: Math.hypot(w, h) / 2,
+      fillRadialGradientColorStops: stops,
+    };
+  }
+  // Comme en CSS : la ligne du dégradé passe par le centre et touche les coins opposés.
+  const a = ((g.angle ?? 180) * Math.PI) / 180;
+  const dx = Math.sin(a);
+  const dy = -Math.cos(a);
+  const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
+  return {
+    fillPriority: 'linear-gradient',
+    fillLinearGradientStartPoint: { x: c.x - dx * half, y: c.y - dy * half },
+    fillLinearGradientEndPoint: { x: c.x + dx * half, y: c.y + dy * half },
+    fillLinearGradientColorStops: stops,
+  };
+}
+
+type Pen = { moveTo(x: number, y: number): void; lineTo(x: number, y: number): void; bezierCurveTo(a: number, b: number, c: number, d: number, e: number, f: number): void };
+
+function polygon(ctx: Pen, pts: [number, number][]) {
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+}
+
+/** Points d'un polygone régulier ou d'une étoile inscrit dans la boîte w × h. */
+function radial(w: number, h: number, n: number, inner?: number): [number, number][] {
+  const count = inner === undefined ? n : n * 2;
+  return Array.from({ length: count }, (_, i) => {
+    const r = inner !== undefined && i % 2 ? inner : 1;
+    const a = -Math.PI / 2 + (i * Math.PI * 2) / count;
+    return [w / 2 + (w / 2) * r * Math.cos(a), h / 2 + (h / 2) * r * Math.sin(a)];
+  });
+}
+
+/** Trace le contour d'une forme dans sa boîte (0, 0) – (w, h). */
+export function tracePath(ctx: Pen, l: Pick<RectLayer, 'shape' | 'sides' | 'innerRatio'>, w: number, h: number) {
+  switch (l.shape) {
+    case 'ellipse': {
+      // Quatre arcs de Bézier (k ≈ 0,5523 : approximation standard du cercle).
+      const k = 0.5523, rx = w / 2, ry = h / 2;
+      ctx.moveTo(w, ry);
+      ctx.bezierCurveTo(w, ry + k * ry, rx + k * rx, h, rx, h);
+      ctx.bezierCurveTo(rx - k * rx, h, 0, ry + k * ry, 0, ry);
+      ctx.bezierCurveTo(0, ry - k * ry, rx - k * rx, 0, rx, 0);
+      ctx.bezierCurveTo(rx + k * rx, 0, w, ry - k * ry, w, ry);
+      return;
+    }
+    case 'triangle':
+      return polygon(ctx, [[w / 2, 0], [w, h], [0, h]]);
+    case 'diamond':
+      return polygon(ctx, [[w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2]]);
+    case 'polygon':
+      return polygon(ctx, radial(w, h, Math.max(3, l.sides ?? 6)));
+    case 'star':
+      return polygon(ctx, radial(w, h, Math.max(3, l.sides ?? 5), l.innerRatio ?? 0.45));
+    case 'arrow':
+      return polygon(ctx, [[0, h * 0.3], [w * 0.6, h * 0.3], [w * 0.6, 0], [w, h / 2], [w * 0.6, h], [w * 0.6, h * 0.7], [0, h * 0.7]]);
+    case 'heart':
+      ctx.moveTo(w / 2, h);
+      ctx.bezierCurveTo(w * 0.15, h * 0.72, 0, h * 0.5, 0, h * 0.28);
+      ctx.bezierCurveTo(0, h * 0.08, w * 0.15, 0, w * 0.28, 0);
+      ctx.bezierCurveTo(w * 0.4, 0, w * 0.48, h * 0.08, w / 2, h * 0.2);
+      ctx.bezierCurveTo(w * 0.52, h * 0.08, w * 0.6, 0, w * 0.72, 0);
+      ctx.bezierCurveTo(w * 0.85, 0, w, h * 0.08, w, h * 0.28);
+      ctx.bezierCurveTo(w, h * 0.5, w * 0.85, h * 0.72, w / 2, h);
+      return;
+    default:
+      return polygon(ctx, [[0, 0], [w, 0], [w, h], [0, h]]);
+  }
 }
 
 function makeNode(l: Layer, assets: Map<string, LoadedAsset>): Konva.Shape {
@@ -70,19 +150,30 @@ function makeNode(l: Layer, assets: Map<string, LoadedAsset>): Konva.Shape {
         shadowOpacity: 0.55,
       });
     }
-    case 'rect':
-      return new Konva.Rect({
+    case 'rect': {
+      const look: Konva.ShapeConfig = {
         ...common,
         width: l.width,
         height: l.height,
-        fill: l.gradient ? undefined : l.fill,
-        fillLinearGradientStartPoint: l.gradient ? { x: 0, y: 0 } : undefined,
-        fillLinearGradientEndPoint: l.gradient ? { x: 0, y: l.height } : undefined,
-        fillLinearGradientColorStops: l.gradient ? [0, l.gradient.from, 1, l.gradient.to] : undefined,
-        cornerRadius: l.cornerRadius,
+        fill: l.fill,
+        ...(l.gradient ? gradientFill(l.gradient, l.width, l.height) : {}),
+        stroke: l.strokeWidth ? l.strokeColor ?? '#ffffff' : undefined,
+        strokeWidth: l.strokeWidth ?? 0,
+        lineJoin: 'round',
+      };
+      if (!l.shape || l.shape === 'rect') return new Konva.Rect({ ...look, cornerRadius: l.cornerRadius });
+      return new Konva.Shape({
+        ...look,
+        sceneFunc(ctx, shape) {
+          ctx.beginPath();
+          tracePath(ctx, l, shape.width(), shape.height());
+          ctx.closePath();
+          ctx.fillStrokeShape(shape);
+        },
       });
-    case 'text':
-      return new Konva.Text({
+    }
+    case 'text': {
+      const node = new Konva.Text({
         ...common,
         width: l.width,
         height: l.height > 0 ? l.height : undefined,
@@ -104,6 +195,9 @@ function makeNode(l: Layer, assets: Map<string, LoadedAsset>): Konva.Shape {
         shadowOffset: { x: 0.35, y: 0.35 },
         shadowOpacity: 0.7,
       });
+      if (l.gradient) node.setAttrs(gradientFill(l.gradient, node.width(), node.height()));
+      return node;
+    }
   }
 }
 

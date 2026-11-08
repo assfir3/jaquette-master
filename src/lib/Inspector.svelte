@@ -1,8 +1,10 @@
 <script lang="ts">
   import { editor } from './editor.svelte';
+  import FillEditor from './FillEditor.svelte';
   import {
     FONTS,
     PANEL_LABELS,
+    SHAPES,
     containRect,
     coverRect,
     effectiveDpi,
@@ -84,9 +86,9 @@
     {#if l.type === 'image' && asset}
       <section>
         <h3>Placer l'image</h3>
-        {#if geo.disc}
+        {#if geo.disc || geo.cart}
           <div class="grid2">
-            <button onclick={() => fit('all', 'cover')}>Remplir le disque</button>
+            <button onclick={() => fit('all', 'cover')}>{geo.cart ? "Remplir l'étiquette" : 'Remplir le disque'}</button>
             <button onclick={() => fit('all', 'contain')}>Ajuster</button>
           </div>
         {:else}
@@ -144,7 +146,6 @@
               <button class:on={l.align === v} title={t} onclick={() => setText('align', v as TextLayer['align'], false)}>{icon}</button>
             {/each}
           </div>
-          <input type="color" value={l.fill} oninput={(e) => setText('fill', str(e))} title="Couleur du texte" />
         </div>
         <label>Espacement des lettres
           <input type="range" min="-1" max="6" step="0.1" value={l.letterSpacing} oninput={(e) => setText('letterSpacing', num(e))} />
@@ -164,21 +165,50 @@
           <button onclick={flip}>Inverser le sens de lecture</button>
         {/if}
       </section>
+      <section>
+        <h3>Couleur du texte</h3>
+        <FillEditor fill={l.fill} gradient={l.gradient} onchange={(p, m) => editor.updateLayer(l.id, p, m && `${l.id}:${m}`)} />
+      </section>
     {/if}
 
     {#if l.type === 'rect'}
       <section>
+        <h3>Forme</h3>
+        <div class="shapes">
+          {#each SHAPES as sh}
+            <button class:on={(l.shape ?? 'rect') === sh.kind} title={sh.label} aria-label={sh.label}
+              onclick={() => editor.updateLayer(l.id, { shape: sh.kind, sides: l.sides ?? (sh.kind === 'star' ? 5 : 6) })}>{sh.icon}</button>
+          {/each}
+        </div>
+        {#if !l.shape || l.shape === 'rect'}
+          <label>Arrondi des coins
+            <input type="range" min="0" max="20" step="0.5" value={l.cornerRadius} oninput={(e) => editor.updateLayer(l.id, { cornerRadius: num(e) }, `${l.id}:radius`)} />
+          </label>
+        {/if}
+        {#if l.shape === 'polygon' || l.shape === 'star'}
+          <label>{l.shape === 'star' ? 'Branches' : 'Côtés'} <strong>{l.sides ?? (l.shape === 'star' ? 5 : 6)}</strong>
+            <input type="range" min="3" max="16" step="1" value={l.sides ?? (l.shape === 'star' ? 5 : 6)} oninput={(e) => editor.updateLayer(l.id, { sides: num(e) }, `${l.id}:sides`)} />
+          </label>
+        {/if}
+        {#if l.shape === 'star'}
+          <label>Creux des branches
+            <input type="range" min="0.15" max="0.9" step="0.01" value={l.innerRatio ?? 0.45} oninput={(e) => editor.updateLayer(l.id, { innerRatio: num(e) }, `${l.id}:inner`)} />
+          </label>
+        {/if}
+        {#if l.width !== l.height}
+          <button onclick={() => editor.updateLayer(l.id, { height: l.width })}>Proportions égales (carré, cercle)</button>
+        {/if}
+      </section>
+      <section>
         <h3>Couleur</h3>
+        <FillEditor fill={l.fill} gradient={l.gradient} onchange={(p, m) => editor.updateLayer(l.id, p, m && `${l.id}:${m}`)} />
         <div class="row">
-          <input type="color" value={l.fill} oninput={(e) => editor.updateLayer(l.id, { fill: str(e), gradient: undefined }, `${l.id}:fill`)} />
-          <code>{l.gradient ? 'Dégradé' : l.fill}</code>
-          {#if l.gradient}
-            <button onclick={() => editor.updateLayer(l.id, { gradient: undefined })}>Couleur unie</button>
+          <label class="check"><input type="checkbox" checked={!!l.strokeWidth} onchange={() => editor.updateLayer(l.id, { strokeWidth: l.strokeWidth ? 0 : 0.6, strokeColor: l.strokeColor ?? '#ffffff' })} />Contour</label>
+          {#if l.strokeWidth}
+            <input type="color" value={l.strokeColor ?? '#ffffff'} oninput={(e) => editor.updateLayer(l.id, { strokeColor: str(e) }, `${l.id}:stroke`)} title="Couleur du contour" />
+            <input type="range" min="0.1" max="4" step="0.1" value={l.strokeWidth} oninput={(e) => editor.updateLayer(l.id, { strokeWidth: num(e) }, `${l.id}:strokeW`)} title="Épaisseur du contour" />
           {/if}
         </div>
-        <label>Arrondi des coins
-          <input type="range" min="0" max="20" step="0.5" value={l.cornerRadius} oninput={(e) => editor.updateLayer(l.id, { cornerRadius: num(e) }, `${l.id}:radius`)} />
-        </label>
       </section>
     {/if}
 
@@ -321,8 +351,18 @@
     resize: vertical;
     font: inherit;
   }
-  code {
-    font-size: 12px;
-    color: var(--muted);
+  .shapes {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+  }
+  .shapes button {
+    padding: 5px 0;
+    font-size: 15px;
+  }
+  .shapes button.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
   }
 </style>

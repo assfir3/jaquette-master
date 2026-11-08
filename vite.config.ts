@@ -10,7 +10,13 @@ function apiPlugin(env: Record<string, string>): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith('/api/')) return next();
-        const response = await handleApi(new Request(`http://localhost${req.url}`, { method: req.method }), env);
+        // Seules les clés saisies dans l'interface sont transmises (pas les cookies ni le reste).
+        const headers = new Headers();
+        for (const k of ['x-steamgriddb-key', 'x-mobygames-key']) {
+          const v = req.headers[k];
+          if (typeof v === 'string') headers.set(k, v);
+        }
+        const response = await handleApi(new Request(`http://localhost${req.url}`, { method: req.method, headers }), env);
         if (!response) return next();
         res.statusCode = response.status;
         response.headers.forEach((v, k) => res.setHeader(k, v));

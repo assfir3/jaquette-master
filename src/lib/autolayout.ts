@@ -1,6 +1,10 @@
 import {
   coverRect,
+  CART_ART,
+  cartGeometry,
+  cartLabelFrame,
   discGeometry,
+  usesCartridge,
   newImageLayer,
   newRectLayer,
   newTextLayer,
@@ -77,6 +81,7 @@ function hslToHex(h: number, s: number, l: number): string {
  * nom et année en bas. Le fond reprend la couleur de la tranche.
  */
 export function autoDiscLayout(doc: Doc, input: AutoLayoutInput): { background: string; layers: Layer[] } {
+  if (usesCartridge(doc)) return autoCartLayout(doc, input);
   const geo = discGeometry(doc);
   const c = geo.W / 2;
   const { outer, inner } = geo.disc!;
@@ -120,4 +125,29 @@ export function autoDiscLayout(doc: Doc, input: AutoLayoutInput): { background: 
   });
 
   return { background, layers };
+}
+
+/**
+ * Étiquette de cartouche (Switch) comme celles du commerce : bandeau rouge et logo console en haut,
+ * jaquette du jeu au milieu, bandeau noir et code du jeu en bas.
+ */
+function autoCartLayout(doc: Doc, input: AutoLayoutInput): { background: string; layers: Layer[] } {
+  const geo = cartGeometry();
+  const layers: Layer[] = [];
+  const art = input.cover ?? input.hero;
+  if (art) {
+    // Le visuel déborde sur les côtés dans le fond perdu, pour ne pas laisser de filet blanc à la découpe.
+    const zone = { x: -geo.bleed, y: CART_ART.y, width: geo.W + 2 * geo.bleed, height: CART_ART.height };
+    const k = Math.max(zone.width / art.width, zone.height / art.height);
+    const w = art.width * k;
+    const h = art.height * k;
+    layers.push(newImageLayer(art, { x: zone.x + (zone.width - w) / 2, y: zone.y + (zone.height - h) / 2, width: w, height: h }, 'all', 'Visuel cartouche'));
+  } else if (input.logo) {
+    const k = Math.min((geo.W - 3) / input.logo.width, 8 / input.logo.height);
+    const w = input.logo.width * k;
+    const h = input.logo.height * k;
+    layers.push(newImageLayer(input.logo, { x: (geo.W - w) / 2, y: CART_ART.y + (CART_ART.height - h) / 2, width: w, height: h }, 'all', 'Logo cartouche'));
+  }
+  layers.push(...cartLabelFrame(doc));
+  return { background: '#ffffff', layers };
 }

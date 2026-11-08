@@ -1,6 +1,6 @@
 # Jaquette Master
 
-Créer facilement des jaquettes de jeux vidéo à imprimer : face avant, tranche et dos d'un boîtier DVD, exportés en PDF 300 dpi avec fond perdu et traits de coupe.
+Créer facilement des jaquettes de jeux vidéo à imprimer : face avant, tranche et dos d'un boîtier (DVD, Blu-ray, PlayStation, Xbox, Switch…), exportés en PDF 300 dpi avec fond perdu et traits de coupe.
 
 ## Télécharger
 
@@ -36,7 +36,7 @@ npm run dist:win   # fabrique le .exe (sur Windows)
 Onglet **Recherche** : on tape le nom du jeu, on choisit le résultat, puis **Créer la jaquette automatiquement**.
 Les visuels viennent de Steam (sans clé) : jaquette verticale, grand fond, logo transparent, captures, résumé en français, développeur, éditeur, année.
 
-Optionnel : une clé **SteamGridDB** (gratuite, sur steamgriddb.com → Profil → Préférences → API) ajoute des dizaines de jaquettes et logos créés par la communauté, et les jeux hors Steam :
+Optionnel : une clé **SteamGridDB** (gratuite, sur steamgriddb.com → Profil → Préférences → API) ajoute des dizaines de jaquettes et logos créés par la communauté, et les jeux hors Steam. Colle-la dans **Clés d'API**, en bas de l'onglet Recherche : elle est vérifiée tout de suite et gardée sur l'appareil. Même chose pour la clé MobyGames. Pour une installation partagée, les clés peuvent aussi aller dans un fichier :
 
 ```bash
 cp .env.example .env.local   # puis colle la clé dans STEAMGRIDDB_API_KEY
@@ -54,7 +54,7 @@ Dans la fiche d'un jeu, choisis un modèle avant **Créer la jaquette automatiqu
 
 ## Jaquettes officielles du commerce (MobyGames)
 
-Avec une clé **MobyGames** (`MOBYGAMES_API_KEY` dans `.env.local`), la fiche d'un jeu liste les éditions scannées par pays, éditions françaises en premier. « Utiliser cette édition » pose la vraie face, le vrai dos et le disque. Sans clé, cette partie est simplement masquée. Usage personnel uniquement ; l'usage commercial demande l'accord de MobyGames.
+Avec une clé **MobyGames** (dans **Clés d'API**, ou `MOBYGAMES_API_KEY` dans `.env.local`), la fiche d'un jeu liste les éditions scannées par pays, éditions françaises en premier. « Utiliser cette édition » pose la vraie face, le vrai dos et le disque. Sans clé, cette partie est simplement masquée. Usage personnel uniquement ; l'usage commercial demande l'accord de MobyGames.
 
 ## Aperçu 3D
 
@@ -79,6 +79,29 @@ Chaque image peut être recolorée en blanc, en noir ou dans une teinte au choix
 
 Les logos sont téléchargés à la demande, jamais livrés avec l'outil : ce sont des marques de leurs propriétaires.
 
+## Formats de boîtier
+
+**Mise en page › Format**. Changer de format adapte la mise en page (⌘Z pour revenir). Un nouveau projet reprend le format du précédent.
+
+| Format | Face | Tranche | Hauteur |
+|---|---|---|---|
+| DVD / PS2 / Xbox / Xbox 360 / Wii / Wii U / PC | 129,5 mm | 14 mm | 183 mm |
+| Blu-ray | 128,5 mm | 12 mm | 148 mm |
+| PS3 | 128 mm | 14 mm | 150 mm |
+| PS4 / PS5 / Xbox One / Series | 130 mm | 13 mm | 160 mm |
+| Nintendo Switch / Switch 2 | 99 mm | 10 mm | 161 mm |
+| Personnalisé | à mesurer | à mesurer | à mesurer |
+
+Les fabricants varient de 1 à 2 mm : en cas de doute, mesure ta boîte et choisis **Personnalisé**.
+
+Pour la **Switch**, la deuxième surface est l'**étiquette de la cartouche** (18,5 × 25 mm, mesure de la communauté à vérifier) au lieu de la rondelle : bandeau rouge et logo, visuel du jeu, bandeau noir et code, comme en magasin. Export PNG, PDF A4 de 6 étiquettes, ou feuille de 24 dans **Impression**. L'aperçu 3D montre la boîte transparente avec la cartouche (grise pour la Switch, rouge pour la Switch 2) ; la couleur du boîtier se choisit en haut de l'aperçu.
+
+## Formes et dégradés
+
+Onglet **Mise en page › Formes** : rectangle, ellipse, triangle, losange, polygone (3 à 16 côtés), étoile (branches et creux réglables), flèche et cœur, avec contour au choix. **Fond en dégradé** pose un fond qui couvre toute la surface, tout derrière.
+
+La couleur d'une forme ou d'un texte peut être **unie**, en **dégradé** linéaire (direction libre, 8 raccourcis) ou **radial**, avec 2 ou 3 couleurs et une opacité par couleur (pour un fondu vers le transparent). Huit dégradés sont prêts à l'emploi.
+
 ## Rondelle CD/DVD
 
 Bouton **Boîtier / Rondelle** au-dessus de la zone de travail : la rondelle est une deuxième surface du même projet, créée en même temps que la jaquette par la recherche automatique.
@@ -102,7 +125,7 @@ Les positions des planches d'étiquettes du commerce varient d'une marque à l'a
 
 ## Ce que fait l'éditeur
 
-- Gabarit boîtier DVD : 273 × 183 mm (tranche 14 mm réglable), fond perdu 3 mm, marge de sécurité 4 mm.
+- Gabarits DVD (273 × 183 mm), Blu-ray, PS3, PS4/PS5, Switch et personnalisé, tranche réglable, fond perdu 3 mm, marge de sécurité 4 mm (voir Formats de boîtier).
 - Glisser-déposer ou coller (⌘V) une image : elle remplit automatiquement le panneau visé (face, dos, tranche ou tout).
 - Textes (titre face, titre tranche pivoté, résumé au dos), bandes de couleur, calques, aimantation sur les plis et les marges.
 - Indication de la résolution réelle de chaque image à l'impression (dpi).

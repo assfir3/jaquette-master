@@ -64,9 +64,43 @@ const IMAGE_HOSTS = [
   /^cdn\.mobygames\.com$/,
 ];
 
-export async function handleApi(req: Request, env: Env): Promise<Response | null> {
+/** Format plausible d'une clé d'API (évite d'envoyer n'importe quoi aux services). */
+const KEY_FORMAT = /^[A-Za-z0-9_-]{8,128}$/;
+
+/**
+ * Clés saisies dans l'interface : envoyées par le navigateur dans des en-têtes,
+ * elles remplacent celles du fichier de configuration pour cette requête seulement.
+ */
+function withUserKeys(req: Request, env: Env): Env & { userKeys: { steamgriddb: boolean; mobygames: boolean } } {
+  const sgdb = req.headers.get('x-steamgriddb-key')?.trim();
+  const moby = req.headers.get('x-mobygames-key')?.trim();
+  const okSgdb = !!sgdb && KEY_FORMAT.test(sgdb);
+  const okMoby = !!moby && KEY_FORMAT.test(moby);
+  return {
+    ...env,
+    STEAMGRIDDB_API_KEY: okSgdb ? sgdb : env.STEAMGRIDDB_API_KEY,
+    MOBYGAMES_API_KEY: okMoby ? moby : env.MOBYGAMES_API_KEY,
+    userKeys: { steamgriddb: okSgdb, mobygames: okMoby },
+  };
+}
+
+/** Essaie une clé auprès du service (sans cache) pour dire tout de suite si elle est valide. */
+async function checkKey(service: string, env: Env): Promise<{ ok: boolean; error?: string }> {
+  const key = service === 'steamgriddb' ? env.STEAMGRIDDB_API_KEY : env.MOBYGAMES_API_KEY;
+  if (!key) return { ok: false, error: 'Aucune clé' };
+  const res =
+    service === 'steamgriddb'
+      ? await fetch(`${SGDB}/search/autocomplete/portal`, { headers: { authorization: `Bearer ${key}`, 'user-agent': UA } })
+      : await fetch(`${MOBY}/genres?api_key=${encodeURIComponent(key)}`, { headers: { 'user-agent': UA } });
+  if (res.ok) return { ok: true };
+  if (res.status === 401 || res.status === 403) return { ok: false, error: 'Clé refusée par le service' };
+  return { ok: false, error: `Le service a répondu ${res.status}` };
+}
+
+export async function handleApi(req: Request, baseEnv: Env): Promise<Response | null> {
   const url = new URL(req.url);
   if (!url.pathname.startsWith('/api/')) return null;
+  const env = withUserKeys(req, baseEnv);
   try {
     const path = url.pathname.slice(5);
     if (path === 'status')
@@ -74,8 +108,12 @@ export async function handleApi(req: Request, env: Env): Promise<Response | null
         steam: true,
         steamgriddb: !!env.STEAMGRIDDB_API_KEY,
         mobygames: !!env.MOBYGAMES_API_KEY,
+        /** Clés venant de l'interface (sinon du fichier de configuration). */
+        userKeys: env.userKeys,
         configFile: env.CONFIG_FILE ?? '.env.local',
       });
+    const check = path.match(/^keys\/check\/(steamgriddb|mobygames)$/);
+    if (check) return json(await checkKey(check[1], env));
     if (path === 'moby/find') return json(await mobyFind(url.searchParams.get('title') ?? '', env));
     if (path === 'moby/covers')
       return json(await mobyCovers(url.searchParams.get('game') ?? '', url.searchParams.get('platform') ?? '', env));
@@ -150,12 +188,25 @@ async function sgdbSearch(q: string, env: Env): Promise<SearchResult[]> {
     `${SGDB}/search/autocomplete/${encodeURIComponent(q)}`,
     { authorization: `Bearer ${env.STEAMGRIDDB_API_KEY}` },
   );
-  return (data.data ?? []).map((g) => ({
+  const games = (data.data ?? []).slice(0, 12);
+  // L'autocomplétion ne donne pas d'image : on prend une jaquette par jeu, en parallèle.
+  const thumbs = await Promise.all(games.map((g) => sgdbThumb(g.id, env).catch(() => undefined)));
+  return games.map((g, i) => ({
     source: 'steamgriddb',
     id: String(g.id),
     name: g.name,
     year: g.release_date ? String(new Date(g.release_date * 1000).getFullYear()) : undefined,
+    thumb: thumbs[i],
   }));
+}
+
+/** Miniature d'un jeu SteamGridDB : jaquette horizontale de préférence (comme celles de Steam), sinon la première. */
+async function sgdbThumb(id: number, env: Env): Promise<string | undefined> {
+  const r = await getJson<{ data: SgdbImage[] }>(`${SGDB}/grids/game/${id}?types=static&nsfw=false&humor=false`, {
+    authorization: `Bearer ${env.STEAMGRIDDB_API_KEY}`,
+  });
+  const list = (r.data ?? []).filter((i) => !i.nsfw && !i.humor);
+  return (list.find((i) => i.width > i.height) ?? list[0])?.thumb;
 }
 
 // ---------- Steam ----------

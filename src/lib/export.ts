@@ -1,7 +1,9 @@
 import Konva from 'konva';
 import { jsPDF } from 'jspdf';
 import {
+  CART,
   DISC,
+  usesCartridge,
   TEMPLATES,
   geometry,
   surfaceBackground,
@@ -42,8 +44,11 @@ export async function renderToCanvas(
   return canvas;
 }
 
-/** Petits aperçus de la tranche et de la face pour l'étagère. */
-export async function shelfPreviews(doc: Doc, assets: Map<string, LoadedAsset>): Promise<{ spine: string; front: string }> {
+/** Petits aperçus pour l'étagère : tranche, face, dos, et la rondelle (ou la cartouche) si elle existe. */
+export async function shelfPreviews(
+  doc: Doc,
+  assets: Map<string, LoadedAsset>,
+): Promise<{ spine: string; front: string; back: string; media?: string }> {
   const dpi = 90;
   const canvas = await renderToCanvas(doc, assets, dpi);
   const geo = geometry(doc);
@@ -55,9 +60,17 @@ export async function shelfPreviews(doc: Doc, assets: Map<string, LoadedAsset>):
     c.getContext('2d')!.drawImage(canvas, Math.round((x + geo.bleed) * k), Math.round(geo.bleed * k), c.width, c.height, 0, 0, c.width, c.height);
     return c.toDataURL('image/jpeg', 0.82);
   };
+  let media: string | undefined;
+  if (doc.disc.layers.length) {
+    // PNG : la rondelle garde sa transparence autour et au centre.
+    const m = await renderToCanvas(doc, assets, usesCartridge(doc) ? 200 : 60, 'disc');
+    media = m.toDataURL('image/png');
+  }
   return {
     spine: crop(geo.panels.spine.x, geo.panels.spine.w),
     front: crop(geo.panels.front.x, geo.panels.front.w),
+    back: crop(geo.panels.back.x, geo.panels.back.w),
+    media,
   };
 }
 
@@ -168,7 +181,44 @@ export async function exportDiscPng(doc: Doc, assets: Map<string, LoadedAsset>) 
   const blob = await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Export PNG impossible'))), 'image/png'),
   );
-  download(blob, `${slugify(doc.title)}-rondelle.png`);
+  download(blob, `${slugify(doc.title)}-${usesCartridge(doc) ? 'cartouche' : 'rondelle'}.png`);
+}
+
+/** Étiquettes de cartouche à taille réelle sur une feuille A4 (6 exemplaires), contour de coupe en pointillés. */
+export async function buildCartPdf(doc: Doc, assets: Map<string, LoadedAsset>): Promise<jsPDF> {
+  const art = await renderToCanvas(doc, assets, EXPORT_DPI, 'disc');
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  pdf.setProperties({ title: `${doc.title || 'Cartouche'} — étiquettes de cartouche`, creator: 'Jaquette Master' });
+  const b = CART.bleed;
+  const w = CART.width + 2 * b;
+  const h = CART.height + 2 * b;
+  const gap = 8;
+  const cols = 3;
+  const rows = 2;
+  const x0 = (210 - (cols * w + (cols - 1) * gap)) / 2;
+  const y0 = 25;
+  const data = art.toDataURL('image/png');
+  pdf.setDrawColor(150);
+  pdf.setLineWidth(0.15);
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      const x = x0 + c * (w + gap);
+      const y = y0 + r * (h + gap);
+      // Même image réutilisée : le PDF ne la contient qu'une fois.
+      pdf.addImage(data, 'PNG', x, y, w, h, 'cart', 'NONE');
+      pdf.setLineDashPattern([0.8, 0.6], 0);
+      pdf.roundedRect(x + b, y + b, CART.width, CART.height, CART.radius, CART.radius, 'S');
+      pdf.setLineDashPattern([], 0);
+    }
+  pdf.setFontSize(7);
+  pdf.setTextColor(110);
+  pdf.text(
+    `${doc.title || 'Sans titre'} · cartouche ${CART.width} × ${CART.height} mm · découper sur les pointillés · imprimer à 100 %`,
+    105,
+    y0 + rows * (h + gap) + 4,
+    { align: 'center' },
+  );
+  return pdf;
 }
 
 /** Rondelle à taille réelle sur une feuille A4, avec cercles de découpe (papier autocollant). */
@@ -210,6 +260,7 @@ export async function buildDiscPdf(doc: Doc, assets: Map<string, LoadedAsset>): 
 }
 
 export async function exportDiscPdf(doc: Doc, assets: Map<string, LoadedAsset>) {
+  if (usesCartridge(doc)) return (await buildCartPdf(doc, assets)).save(`${slugify(doc.title)}-cartouche.pdf`);
   const pdf = await buildDiscPdf(doc, assets);
   pdf.save(`${slugify(doc.title)}-rondelle.pdf`);
 }

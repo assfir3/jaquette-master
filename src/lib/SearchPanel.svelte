@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import { TEMPLATE_STYLES, buildTemplate, type TemplateStyle } from './templates';
   import { editor } from './editor.svelte';
-  import { coverRect, geometry, newImageLayer, newTextLayer, PANEL_LABELS, type ClipTarget } from './model';
+  import { coverRect, geometry, mediaName, newImageLayer, newTextLayer, PANEL_LABELS, usesCartridge, type ClipTarget } from './model';
   import { placeLogo } from './logos';
+  import KeysPanel from './KeysPanel.svelte';
   import {
     VISUAL_MIME,
     findMoby,
@@ -59,15 +60,32 @@
   let loadingPacks = $state(false);
   let mobyError = $state<string | null>(null);
 
-  onMount(() => {
-    if (!query && editor.doc.title) query = editor.doc.title;
-    getStatus()
+  /** Clés présentes dans le fichier de configuration du serveur (et non saisies dans l'interface). */
+  let fromFile = $state({ steamgriddb: false, mobygames: false });
+  /** Panneau des clés ouvert au premier affichage s'il manque la clé SteamGridDB (puis laissé tel quel). */
+  let keysOpen = $state<boolean | null>(null);
+
+  function refreshStatus() {
+    return getStatus()
       .then((s) => {
+        const hadMoby = hasMoby;
         hasSgdb = s.steamgriddb;
         configFile = s.configFile ?? configFile;
         hasMoby = s.mobygames;
+        keysOpen ??= !s.steamgriddb;
+        fromFile = {
+          steamgriddb: s.steamgriddb && !s.userKeys?.steamgriddb,
+          mobygames: s.mobygames && !s.userKeys?.mobygames,
+        };
+        // Nouvelle clé MobyGames pendant qu'une fiche est ouverte : on relance la recherche des jaquettes.
+        if (hasMoby && !hadMoby && game) loadMoby(game.name);
       })
       .catch(() => {});
+  }
+
+  onMount(() => {
+    if (!query && editor.doc.title) query = editor.doc.title;
+    refreshStatus();
   });
 
   async function runSearch(e?: Event) {
@@ -161,7 +179,7 @@
   /** Crée la jaquette avec le modèle choisi (ou les scans officiels d'une édition). */
   async function build(pack?: CoverPack) {
     if (!game) return;
-    if ((editor.doc.layers.length || editor.doc.disc.layers.length) && !confirm('Remplacer la jaquette et la rondelle actuelles par une mise en page automatique ? (⌘Z pour revenir en arrière)')) return;
+    if ((editor.doc.layers.length || editor.doc.disc.layers.length) && !confirm(`Remplacer la jaquette et ${mediaName(editor.doc).lower} actuelles par une mise en page automatique ? (⌘Z pour revenir en arrière)`)) return;
     building = true;
     try {
       const load = (url: string | null | undefined) => (url && !broken[url] ? loadVisual(url).catch(() => undefined) : Promise.resolve(undefined));
@@ -207,7 +225,7 @@
       });
       editor.selectedId = null;
       editor.renderVersion++;
-      notify(`Jaquette et rondelle de « ${g.name} » créées. Tout reste modifiable.`);
+      notify(`Jaquette et ${usesCartridge(editor.doc) ? 'étiquette de cartouche' : 'rondelle'} de « ${g.name} » créées. Tout reste modifiable.`);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Mise en page impossible', 'error');
     } finally {
@@ -271,7 +289,7 @@
           {#if placing === v.url}
             <div class="place">
               {#each targets as t}<button onclick={() => place(v, t)}>{PANEL_LABELS[t]}</button>{/each}
-              <button onclick={() => place(v, 'disc')}>Rondelle</button>
+              <button onclick={() => place(v, 'disc')}>{mediaName(editor.doc).title}</button>
             </div>
           {/if}
           {#if kind === 'logos' || kind === 'studios'}
@@ -317,7 +335,7 @@
       {#if !hasMoby}
         <p class="note">
           Pour retrouver les vraies jaquettes françaises (face, dos et disque scannés), ajoute une clé
-          <strong>MobyGames</strong> dans <code class="path">{configFile}</code> (<code>MOBYGAMES_API_KEY</code>).
+          <strong>MobyGames</strong> dans <em>Clés d'API</em>, en bas de l'onglet Recherche.
         </p>
       {:else if mobyError}
         <p class="error">{mobyError}</p>
@@ -406,10 +424,14 @@
     {/if}
     {#if !hasSgdb}
       <p class="note">
-        Recherche via Steam uniquement. Ajoute une clé <strong>SteamGridDB</strong> (gratuite) dans
-        <code class="path">{configFile}</code> pour plus de jaquettes et de logos, et les jeux hors Steam.
+        Recherche via Steam uniquement. Ajoute une clé <strong>SteamGridDB</strong> (gratuite) ci-dessous
+        pour plus de jaquettes et de logos, et les jeux hors Steam.
       </p>
     {/if}
+  {/if}
+
+  {#if keysOpen !== null}
+    <KeysPanel open={keysOpen} {fromFile} {configFile} onchange={refreshStatus} />
   {/if}
 </div>
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import Canvas from './lib/Canvas.svelte';
   import Inspector from './lib/Inspector.svelte';
   import SearchPanel from './lib/SearchPanel.svelte';
@@ -13,11 +13,21 @@
   import {
     DISC,
     TEMPLATES,
+    normalizeDoc,
+    CART,
+    cartLabelFrame,
+    mediaName,
+    usesCartridge,
+    applyFormat,
+    caseSize,
+    type TemplateId,
     coverRect,
     geometry,
     newDoc,
     newImageLayer,
     newRectLayer,
+    newShapeLayer,
+    SHAPES,
     newSpineTitle,
     newTextLayer,
     uid,
@@ -30,6 +40,10 @@
     getCurrentId,
     loadAutosave,
     loadFromShelf,
+    listShelf,
+    renameInShelf,
+    duplicateInShelf,
+    patchShelfEntry,
     readAsDataUrl,
     saveToShelf,
     setCurrentId,
@@ -40,6 +54,9 @@
   const doc = $derived(editor.doc);
   const geo = $derived(editor.geo);
   const isDisc = $derived(editor.surface === 'disc');
+  /** Jeu sur cartouche (Switch) : la deuxième surface est l'étiquette de la cartouche. */
+  const cart = $derived(usesCartridge(editor.doc));
+  const media = $derived(mediaName(editor.doc));
   const template = $derived(TEMPLATES[doc.template]);
 
   let imageTarget = $state<ClipTarget>('front');
@@ -105,7 +122,14 @@
         updatedAt: Date.now(),
         spine: previews?.spine,
         front: previews?.front,
+        back: previews?.back,
+        media: previews?.media,
+        layerCount: snapshot.layers.length,
+        mediaCount: snapshot.disc.layers.length,
         spineMm: geometry(snapshot).panels.spine.w,
+        heightMm: geometry(snapshot).H,
+        template: snapshot.template,
+        frontMm: geometry(snapshot).panels.front.w,
       },
       file,
     );
@@ -133,6 +157,67 @@
       setCurrentId(id);
     }
     view = 'atelier';
+  }
+
+  /**
+   * Jaquettes rangées avant l'ajout des aperçus du dos et de la rondelle : on les régénère
+   * une fois, en arrière-plan, à l'ouverture de l'étagère.
+   */
+  let refreshing = false;
+  async function refreshOldPreviews() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      for (const e of await listShelf()) {
+        if (e.back) continue;
+        const file = await loadFromShelf(e.id);
+        if (!file) continue;
+        const { doc: d, assets } = await fromProjectFile(file);
+        const map = new Map(assets.map((a) => [a.id, a]));
+        const p = await shelfPreviews(normalizeDoc(d), map).catch(() => null);
+        if (!p) continue;
+        const g = geometry(d);
+        await patchShelfEntry(e.id, {
+          ...p,
+          spineMm: g.panels.spine.w,
+          heightMm: g.H,
+          frontMm: g.panels.front.w,
+          template: d.template,
+          layerCount: d.layers.length,
+          mediaCount: d.disc.layers.length,
+        });
+        shelfVersion++;
+      }
+    } finally {
+      refreshing = false;
+    }
+  }
+  $effect(() => {
+    if (view === 'shelf') untrack(() => refreshOldPreviews());
+  });
+
+  /** Renomme depuis l'étagère ; la jaquette ouverte est renommée dans l'atelier aussi. */
+  async function renameShelf(id: string, title: string) {
+    if (id === projectId) editor.update((d) => (d.title = title));
+    await renameInShelf(id, title);
+    shelfVersion++;
+  }
+
+  /** Copie une jaquette (autre édition, autre plateforme…) et la range à côté. */
+  async function duplicateShelf(id: string) {
+    if (id === projectId) await saveNow();
+    const entry = (await listShelf()).find((e) => e.id === id);
+    const copy = uid();
+    await duplicateInShelf(id, copy, `${entry?.title || 'Sans titre'} (copie)`);
+    shelfVersion++;
+    notify('Copie rangée sur l’étagère.');
+  }
+
+  /** Fichier .jaquette.json d'une jaquette de l'étagère. */
+  async function downloadShelf(id: string) {
+    const file = id === projectId ? toProjectFile($state.snapshot(editor.doc), editor.usedAssets()) : await loadFromShelf(id);
+    if (!file) return notify('Jaquette introuvable.', 'error');
+    download(new Blob([JSON.stringify(file)], { type: 'application/json' }), `${slugify(file.doc.title)}.jaquette.json`);
   }
 
   async function addImages(files: Blob[], target: ClipTarget) {
@@ -169,7 +254,7 @@
   async function newProject() {
     // La jaquette en cours reste rangée sur l'étagère.
     await saveNow();
-    loadInto(newDoc(), [], uid(), false);
+    loadInto(newDoc(editor.doc), [], uid(), false);
     view = 'atelier';
   }
 
@@ -241,7 +326,23 @@
     }, 'spine');
   }
 
+  /** Change de format de boîtier ; la mise en page suit (annulable avec ⌘Z). */
+  function setFormat(id: TemplateId) {
+    const t = TEMPLATES[id];
+    const size = id === 'custom' ? caseSize(editor.doc) : { height: t.height, panelWidth: t.panelWidth };
+    const spine = id === 'custom' ? editor.doc.spine : t.spineDefault;
+    editor.update((d) => applyFormat(d, id, size, spine));
+  }
+  /** Mesure du format personnalisé. */
+  function setCustom(key: 'height' | 'panelWidth', value: number) {
+    if (!Number.isFinite(value) || value < 40 || value > 400) return;
+    const size = { ...caseSize(editor.doc), [key]: value };
+    editor.update((d) => applyFormat(d, 'custom', size, d.spine), `custom:${key}`);
+  }
+
   function onKey(e: KeyboardEvent) {
+    // Les raccourcis d'édition ne valent que dans l'atelier (pas sur l'étagère ni à l'impression).
+    if (view !== 'atelier') return;
     const t = e.target as HTMLElement;
     const typing = t.closest('input, textarea, select, [contenteditable]');
     const mod = e.metaKey || e.ctrlKey;
@@ -289,7 +390,30 @@
     }
   }
 
-  const layerIcon = { image: '▣', text: 'T', rect: '■' } as const;
+  function layerIcon(l: Layer): string {
+    if (l.type === 'image') return '▣';
+    if (l.type === 'text') return 'T';
+    return SHAPES.find((s) => s.kind === (l.shape ?? 'rect'))?.icon ?? '■';
+  }
+
+  /** Forme centrée sur la face (ou la rondelle). */
+  function addShape(kind: (typeof SHAPES)[number]['kind']) {
+    addLayer(newShapeLayer(geo, kind));
+  }
+  /** Bandeaux d'une étiquette de cartouche du commerce (remplace ceux déjà posés). */
+  function addCartFrame() {
+    editor.update((d) => {
+      d.disc.layers = [...d.disc.layers.filter((l) => l.role !== 'cart-frame'), ...cartLabelFrame(d)];
+    });
+  }
+
+  /** Calque de fond en dégradé, placé tout derrière. */
+  function addGradientBackground() {
+    const r = geo.disc ? { x: 0, y: 0, width: geo.W, height: geo.H } : { x: -geo.bleed, y: -geo.bleed, width: geo.W + 2 * geo.bleed, height: geo.H + 2 * geo.bleed };
+    const layer = { ...newShapeLayer(geo, 'rect'), ...r, name: 'Fond dégradé', fill: '#1a1f2c', gradient: { from: '#ff5a3c', via: '#7b1fa2', to: '#0d1018', angle: 160 } };
+    addLayer(layer);
+    editor.moveLayer(layer.id, 'back');
+  }
 </script>
 
 <svelte:window onkeydown={onKey} onpaste={onPaste} onclick={() => (exportOpen = false)} />
@@ -342,13 +466,22 @@
           <button role="menuitem" onclick={() => runExport('png')}>
             <strong>Image PNG</strong><small>300 dpi, fond perdu compris</small>
           </button>
-          <p class="menu-title">Rondelle</p>
-          <button role="menuitem" onclick={() => runExport('disc-png')} disabled={!doc.disc.layers.length}>
-            <strong>Rondelle PNG</strong><small>Transparent autour et au centre, pour l'impression sur CD</small>
-          </button>
-          <button role="menuitem" onclick={() => runExport('disc-pdf')} disabled={!doc.disc.layers.length}>
-            <strong>Rondelle PDF A4</strong><small>Taille réelle et cercles de découpe (papier autocollant)</small>
-          </button>
+          <p class="menu-title">{media.title}</p>
+          {#if cart}
+            <button role="menuitem" onclick={() => runExport('disc-png')} disabled={!doc.disc.layers.length}>
+              <strong>Étiquette PNG</strong><small>{CART.width} × {CART.height} mm à 300 dpi, fond perdu de {CART.bleed} mm</small>
+            </button>
+            <button role="menuitem" onclick={() => runExport('disc-pdf')} disabled={!doc.disc.layers.length}>
+              <strong>Étiquettes PDF A4</strong><small>6 étiquettes à taille réelle, contour de coupe (papier autocollant)</small>
+            </button>
+          {:else}
+            <button role="menuitem" onclick={() => runExport('disc-png')} disabled={!doc.disc.layers.length}>
+              <strong>Rondelle PNG</strong><small>Transparent autour et au centre, pour l'impression sur CD</small>
+            </button>
+            <button role="menuitem" onclick={() => runExport('disc-pdf')} disabled={!doc.disc.layers.length}>
+              <strong>Rondelle PDF A4</strong><small>Taille réelle et cercles de découpe (papier autocollant)</small>
+            </button>
+          {/if}
         </div>
       {/if}
     </div>
@@ -356,7 +489,7 @@
 
   {#if view === 'shelf'}
   <div class="shelf-area">
-    <Shelf currentId={projectId} version={shelfVersion} onOpen={openFromShelf} onNew={newProject} />
+    <Shelf currentId={projectId} version={shelfVersion} onOpen={openFromShelf} onNew={newProject} onRename={renameShelf} onDuplicate={duplicateShelf} onDownload={downloadShelf} />
   </div>
   {:else if view === 'print'}
   <div class="shelf-area">
@@ -378,7 +511,10 @@
     <div class="tabpanel" hidden={tab !== 'design'}>
     {#if isDisc}
     <section>
-      <h2>Rondelle</h2>
+      <h2>{media.title}</h2>
+      {#if cart}
+        <p class="dims">Étiquette de cartouche Switch : {CART.width} × {CART.height} mm (coins arrondis), fond perdu de {CART.bleed} mm. Pas de cote officielle : compare avec ta cartouche avant d'imprimer sur du papier autocollant.</p>
+      {:else}
       <label>Bord extérieur imprimable
         <div class="row">
           <select value={DISC.outerPresets.find((p) => p.value === doc.disc.outer)?.value ?? ''} onchange={(e) => setDisc('outer', Number((e.currentTarget as HTMLSelectElement).value))}>
@@ -389,7 +525,7 @@
           <span class="u">mm</span>
         </div>
       </label>
-      <label>Centre imprimable
+        <label>Centre imprimable
         <div class="row">
           <select value={DISC.innerPresets.find((p) => p.value === doc.disc.inner)?.value ?? ''} onchange={(e) => setDisc('inner', Number((e.currentTarget as HTMLSelectElement).value))}>
             {#each DISC.innerPresets as p}<option value={p.value}>{p.label}</option>{/each}
@@ -399,7 +535,8 @@
           <span class="u">mm</span>
         </div>
       </label>
-      <p class="dims">Regarde sur l'emballage de tes CD/DVD imprimables : la zone imprimable y est indiquée (souvent 22–118 mm ou 41–118 mm).</p>
+        <p class="dims">Regarde sur l'emballage de tes CD/DVD imprimables : la zone imprimable y est indiquée (souvent 22–118 mm ou 41–118 mm).</p>
+      {/if}
       <div class="row">
         <label class="inline">Fond
           <input type="color" value={doc.disc.background} oninput={(e) => editor.update((d) => (d.disc.background = (e.currentTarget as HTMLInputElement).value), 'disc:bg')} />
@@ -411,26 +548,53 @@
     <section>
       <h2>Ajouter</h2>
       <button class="primary" onclick={() => fileInput.click()}>＋ Image</button>
-      <p class="hint">Ou glisse une image sur la rondelle, ou colle-la avec ⌘V.</p>
-      <div class="grid2">
-        <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', doc.title || 'TITRE DU JEU'), name: 'Titre', y: 22, x: 20, width: 80 })}>Titre</button>
-        <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', 'DISQUE 1'), name: 'Texte bas', fontFamily: 'Inter', fontSize: 9, y: 92, x: 30, width: 60, shadow: false })}>Texte bas</button>
+      <p class="hint">Ou glisse une image sur {media.lower}, ou colle-la avec ⌘V.</p>
+      {#if cart}
+        <div class="grid2">
+          <button onclick={addCartFrame} title="Bandeau rouge et logo en haut, bandeau noir et code du jeu en bas">Bandeaux officiels</button>
+          <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', doc.title || 'TITRE DU JEU'), name: 'Titre', x: 1, y: 7, width: geo.W - 2, fontSize: 7 })}>Titre</button>
+        </div>
+      {:else}
+        <div class="grid2">
+          <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', doc.title || 'TITRE DU JEU'), name: 'Titre', y: 22, x: 20, width: 80 })}>Titre</button>
+          <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', 'DISQUE 1'), name: 'Texte bas', fontFamily: 'Inter', fontSize: 9, y: 92, x: 30, width: 60, shadow: false })}>Texte bas</button>
+        </div>
+      {/if}
+      <h3 class="sub">Formes</h3>
+      <div class="shape-grid">
+        {#each SHAPES as sh}
+          <button title={sh.label} aria-label={`Ajouter : ${sh.label}`} onclick={() => addShape(sh.kind)}>{sh.icon}</button>
+        {/each}
       </div>
+      <button onclick={addGradientBackground}>Fond en dégradé</button>
     </section>
     {:else}
     <section>
       <h2>Jaquette</h2>
       <label>Format
-        <select value={doc.template} disabled>
-          {#each Object.values(TEMPLATES) as t}<option value={t.id}>{t.name}</option>{/each}
+        <select value={doc.template} onchange={(e) => setFormat((e.currentTarget as HTMLSelectElement).value as TemplateId)}>
+          {#each Object.values(TEMPLATES) as t}<option value={t.id} title={t.hint}>{t.name}</option>{/each}
         </select>
       </label>
+      <p class="dims">{template.hint}</p>
+      {#if doc.template === 'custom'}
+        <div class="grid2 custom">
+          <label>Hauteur
+            <div class="row"><input class="mm" type="number" min="40" max="400" step="0.5" value={caseSize(doc).height} onchange={(e) => setCustom('height', Number((e.currentTarget as HTMLInputElement).value))} /><span class="u">mm</span></div>
+          </label>
+          <label>Largeur d'une face
+            <div class="row"><input class="mm" type="number" min="40" max="400" step="0.5" value={caseSize(doc).panelWidth} onchange={(e) => setCustom('panelWidth', Number((e.currentTarget as HTMLInputElement).value))} /><span class="u">mm</span></div>
+          </label>
+        </div>
+      {/if}
       <label>Épaisseur de la tranche
         <div class="row">
-          <select value={template.spinePresets.find((p) => p.value === doc.spine)?.value ?? ''} onchange={(e) => setSpine(Number((e.currentTarget as HTMLSelectElement).value))}>
-            {#each template.spinePresets as p}<option value={p.value}>{p.label}</option>{/each}
-            <option value="" disabled>Personnalisée</option>
-          </select>
+          {#if template.spinePresets.length}
+            <select value={template.spinePresets.find((p) => p.value === doc.spine)?.value ?? ''} onchange={(e) => setSpine(Number((e.currentTarget as HTMLSelectElement).value))}>
+              {#each template.spinePresets as p}<option value={p.value}>{p.label}</option>{/each}
+              <option value="" disabled>Personnalisée</option>
+            </select>
+          {/if}
           <input class="mm" type="number" min="3" max="60" step="0.5" value={doc.spine} onchange={(e) => setSpine(Number((e.currentTarget as HTMLInputElement).value))} />
           <span class="u">mm</span>
         </div>
@@ -464,6 +628,13 @@
         <button onclick={() => addLayer({ ...newRectLayer(geo, 'front'), name: 'Bandeau face' })}>Bandeau face</button>
         <button onclick={() => addLayer({ ...newRectLayer(geo, 'back'), name: 'Bandeau dos', y: geo.H + geo.bleed - 22 })}>Bandeau dos</button>
       </div>
+      <h3 class="sub">Formes</h3>
+      <div class="shape-grid">
+        {#each SHAPES as sh}
+          <button title={sh.label} aria-label={`Ajouter : ${sh.label}`} onclick={() => addShape(sh.kind)}>{sh.icon}</button>
+        {/each}
+      </div>
+      <button onclick={addGradientBackground}>Fond en dégradé</button>
     </section>
     {/if}
 
@@ -476,7 +647,7 @@
         {#each [...editor.layers].reverse() as l (l.id)}
           <li class:selected={l.id === editor.selectedId}>
             <button class="pick" onclick={() => (editor.selectedId = l.id)}>
-              <span class="ic">{layerIcon[l.type]}</span>
+              <span class="ic">{layerIcon(l)}</span>
               <span class="nm">{l.name}</span>
               {#if l.locked}<span class="tag">🔒</span>{/if}
             </button>
@@ -507,8 +678,13 @@
     {#if ready && !show3d && editor.layers.length === 0}
       <div class="welcome">
         {#if isDisc}
-          <h1>La rondelle du disque</h1>
-          <p>Glisse une image sur le disque, ou crée la jaquette automatiquement depuis la <strong>Recherche</strong> : la rondelle est faite en même temps.</p>
+          {#if cart}
+            <h1>L'étiquette de la cartouche</h1>
+            <p>Glisse une image sur l'étiquette, ou crée la jaquette automatiquement depuis la <strong>Recherche</strong> : l'étiquette est faite en même temps.</p>
+          {:else}
+            <h1>La rondelle du disque</h1>
+            <p>Glisse une image sur le disque, ou crée la jaquette automatiquement depuis la <strong>Recherche</strong> : la rondelle est faite en même temps.</p>
+          {/if}
         {:else}
           <h1>Ta jaquette commence ici</h1>
           <p>Cherche ton jeu à gauche et clique sur <strong>Créer la jaquette automatiquement</strong>, ou glisse tes propres images sur la face et le dos.</p>
@@ -521,7 +697,7 @@
         <span class="v-case" aria-hidden="true"><i></i><b></b><i></i></span>Boîtier
       </button>
       <button role="tab" aria-selected={isDisc && !show3d} class:on={isDisc && !show3d} onclick={() => ((show3d = false), editor.setSurface('disc'))}>
-        <span class="v-disc" aria-hidden="true"><i></i></span>Rondelle
+        <span class={cart ? 'v-cart' : 'v-disc'} aria-hidden="true"><i></i></span>{media.title}
       </button>
       <button role="tab" aria-selected={show3d} class:on={show3d} onclick={() => ((show3d = true), (editor.selectedId = null))}>
         <span class="v-3d" aria-hidden="true"><i></i></span>Aperçu 3D
@@ -544,6 +720,23 @@
 {/if}
 
 <style>
+  .sub {
+    margin: 4px 0 0;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .shape-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+  }
+  .shape-grid button {
+    padding: 6px 0;
+    font-size: 15px;
+  }
   .app {
     display: grid;
     grid-template-columns: 300px 1fr 280px;
@@ -719,6 +912,12 @@
     height: 36px;
     border-radius: 50%;
     background: radial-gradient(circle, var(--surface) 0 4px, #59627a 4.5px 9px, #3a4256 9.5px);
+  }
+  .v-cart i {
+    width: 24px;
+    height: 34px;
+    border-radius: 3px 3px 4px 4px;
+    background: linear-gradient(#3a4256 0 22%, #59627a 22% 92%, #3a4256 92%);
   }
   .v-3d i {
     width: 24px;

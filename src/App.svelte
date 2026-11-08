@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import Canvas from './lib/Canvas.svelte';
   import Inspector from './lib/Inspector.svelte';
   import SearchPanel from './lib/SearchPanel.svelte';
@@ -13,6 +13,7 @@
   import {
     DISC,
     TEMPLATES,
+    normalizeDoc,
     CART,
     cartLabelFrame,
     mediaName,
@@ -39,6 +40,10 @@
     getCurrentId,
     loadAutosave,
     loadFromShelf,
+    listShelf,
+    renameInShelf,
+    duplicateInShelf,
+    patchShelfEntry,
     readAsDataUrl,
     saveToShelf,
     setCurrentId,
@@ -117,8 +122,14 @@
         updatedAt: Date.now(),
         spine: previews?.spine,
         front: previews?.front,
+        back: previews?.back,
+        media: previews?.media,
+        layerCount: snapshot.layers.length,
+        mediaCount: snapshot.disc.layers.length,
         spineMm: geometry(snapshot).panels.spine.w,
         heightMm: geometry(snapshot).H,
+        template: snapshot.template,
+        frontMm: geometry(snapshot).panels.front.w,
       },
       file,
     );
@@ -146,6 +157,67 @@
       setCurrentId(id);
     }
     view = 'atelier';
+  }
+
+  /**
+   * Jaquettes rangées avant l'ajout des aperçus du dos et de la rondelle : on les régénère
+   * une fois, en arrière-plan, à l'ouverture de l'étagère.
+   */
+  let refreshing = false;
+  async function refreshOldPreviews() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      for (const e of await listShelf()) {
+        if (e.back) continue;
+        const file = await loadFromShelf(e.id);
+        if (!file) continue;
+        const { doc: d, assets } = await fromProjectFile(file);
+        const map = new Map(assets.map((a) => [a.id, a]));
+        const p = await shelfPreviews(normalizeDoc(d), map).catch(() => null);
+        if (!p) continue;
+        const g = geometry(d);
+        await patchShelfEntry(e.id, {
+          ...p,
+          spineMm: g.panels.spine.w,
+          heightMm: g.H,
+          frontMm: g.panels.front.w,
+          template: d.template,
+          layerCount: d.layers.length,
+          mediaCount: d.disc.layers.length,
+        });
+        shelfVersion++;
+      }
+    } finally {
+      refreshing = false;
+    }
+  }
+  $effect(() => {
+    if (view === 'shelf') untrack(() => refreshOldPreviews());
+  });
+
+  /** Renomme depuis l'étagère ; la jaquette ouverte est renommée dans l'atelier aussi. */
+  async function renameShelf(id: string, title: string) {
+    if (id === projectId) editor.update((d) => (d.title = title));
+    await renameInShelf(id, title);
+    shelfVersion++;
+  }
+
+  /** Copie une jaquette (autre édition, autre plateforme…) et la range à côté. */
+  async function duplicateShelf(id: string) {
+    if (id === projectId) await saveNow();
+    const entry = (await listShelf()).find((e) => e.id === id);
+    const copy = uid();
+    await duplicateInShelf(id, copy, `${entry?.title || 'Sans titre'} (copie)`);
+    shelfVersion++;
+    notify('Copie rangée sur l’étagère.');
+  }
+
+  /** Fichier .jaquette.json d'une jaquette de l'étagère. */
+  async function downloadShelf(id: string) {
+    const file = id === projectId ? toProjectFile($state.snapshot(editor.doc), editor.usedAssets()) : await loadFromShelf(id);
+    if (!file) return notify('Jaquette introuvable.', 'error');
+    download(new Blob([JSON.stringify(file)], { type: 'application/json' }), `${slugify(file.doc.title)}.jaquette.json`);
   }
 
   async function addImages(files: Blob[], target: ClipTarget) {
@@ -269,6 +341,8 @@
   }
 
   function onKey(e: KeyboardEvent) {
+    // Les raccourcis d'édition ne valent que dans l'atelier (pas sur l'étagère ni à l'impression).
+    if (view !== 'atelier') return;
     const t = e.target as HTMLElement;
     const typing = t.closest('input, textarea, select, [contenteditable]');
     const mod = e.metaKey || e.ctrlKey;
@@ -415,7 +489,7 @@
 
   {#if view === 'shelf'}
   <div class="shelf-area">
-    <Shelf currentId={projectId} version={shelfVersion} onOpen={openFromShelf} onNew={newProject} />
+    <Shelf currentId={projectId} version={shelfVersion} onOpen={openFromShelf} onNew={newProject} onRename={renameShelf} onDuplicate={duplicateShelf} onDownload={downloadShelf} />
   </div>
   {:else if view === 'print'}
   <div class="shelf-area">

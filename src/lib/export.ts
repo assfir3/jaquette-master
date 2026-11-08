@@ -44,8 +44,11 @@ export async function renderToCanvas(
   return canvas;
 }
 
-/** Petits aperçus de la tranche et de la face pour l'étagère. */
-export async function shelfPreviews(doc: Doc, assets: Map<string, LoadedAsset>): Promise<{ spine: string; front: string }> {
+/** Petits aperçus pour l'étagère : tranche, face, dos, et la rondelle (ou la cartouche) si elle existe. */
+export async function shelfPreviews(
+  doc: Doc,
+  assets: Map<string, LoadedAsset>,
+): Promise<{ spine: string; front: string; back: string; media?: string }> {
   const dpi = 90;
   const canvas = await renderToCanvas(doc, assets, dpi);
   const geo = geometry(doc);
@@ -57,9 +60,17 @@ export async function shelfPreviews(doc: Doc, assets: Map<string, LoadedAsset>):
     c.getContext('2d')!.drawImage(canvas, Math.round((x + geo.bleed) * k), Math.round(geo.bleed * k), c.width, c.height, 0, 0, c.width, c.height);
     return c.toDataURL('image/jpeg', 0.82);
   };
+  let media: string | undefined;
+  if (doc.disc.layers.length) {
+    // PNG : la rondelle garde sa transparence autour et au centre.
+    const m = await renderToCanvas(doc, assets, usesCartridge(doc) ? 200 : 60, 'disc');
+    media = m.toDataURL('image/png');
+  }
   return {
     spine: crop(geo.panels.spine.x, geo.panels.spine.w),
     front: crop(geo.panels.front.x, geo.panels.front.w),
+    back: crop(geo.panels.back.x, geo.panels.back.w),
+    media,
   };
 }
 

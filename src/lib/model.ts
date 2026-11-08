@@ -297,6 +297,12 @@ export function caseSize(doc: Doc): { height: number; panelWidth: number } {
   return { height: t.height, panelWidth: t.panelWidth };
 }
 
+/** Hauteur approximative d'un texte sans hauteur fixe (lignes × interligne). */
+function textHeight(l: Layer): number {
+  if (l.type !== 'text') return l.height;
+  return l.text.split('\n').length * l.fontSize * PT_TO_MM * l.lineHeight;
+}
+
 /**
  * Change de format en gardant la mise en page : chaque élément suit son panneau
  * (dos, tranche, face) et s'adapte à la nouvelle taille.
@@ -310,33 +316,58 @@ export function applyFormat(doc: Doc, template: TemplateId, size: { height: numb
   const geo = geometry(doc);
   const sy = geo.H / old.H;
   for (const l of doc.layers) {
+    // Centre réel de l'élément, rotation comprise (un logo de tranche est tourné de 90° autour de son coin).
+    const rad = (l.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const h0 = l.height > 0 ? l.height : textHeight(l);
+    const cx = l.x + (l.width / 2) * cos - (h0 / 2) * sin;
+    const cy = l.y + (l.width / 2) * sin + (h0 / 2) * cos;
+    // Encombrement à l'écran (largeur et hauteur une fois tourné).
+    const vx = Math.abs(l.width * cos) + Math.abs(h0 * sin);
+    const vy = Math.abs(l.width * sin) + Math.abs(h0 * cos);
+
     // Un élément « toute la jaquette » plus large qu'une face (fond, image panoramique) suit l'ensemble.
-    const panel: ClipTarget =
-      l.clip !== 'all' ? l.clip : l.width > old.panels.front.w ? 'all' : panelAt(old, l.x + l.width / 2);
+    const panel: ClipTarget = l.clip !== 'all' ? l.clip : vx > old.panels.front.w ? 'all' : panelAt(old, cx);
     const from = panel === 'all' ? { x: 0, w: old.W } : old.panels[panel];
     const to = panel === 'all' ? { x: 0, w: geo.W } : geo.panels[panel];
     const sx = to.w / from.w;
-    const vertical = Math.abs(l.rotation % 180) === 90;
-    l.x = to.x + (l.x - from.x) * sx;
-    l.y *= sy;
+    // Échelle le long de la largeur et de la hauteur propres de l'élément (inversées s'il est vertical).
+    const upright = Math.abs(cos) >= Math.abs(sin);
+    const sw = upright ? sx : sy;
+    const sh = upright ? sy : sx;
+
     if (l.type === 'image') {
       // Une image garde ses proportions. Un fond qui couvre son panneau grandit pour le couvrir encore ;
       // un logo ou une capture rétrécit pour tenir.
-      const covers = l.width >= from.w * 0.9 && l.height >= old.H * 0.9;
+      const covers = vx >= from.w * 0.9 && vy >= old.H * 0.9;
       const k = covers ? Math.max(sx, sy) : Math.min(sx, sy);
-      const cx = l.x + (l.width * sx) / 2;
-      const cy = l.y + (l.height * sy) / 2;
       l.width *= k;
       l.height *= k;
-      l.x = cx - l.width / 2;
-      l.y = cy - l.height / 2;
     } else if (l.type === 'text') {
-      l.width *= vertical ? sy : sx;
-      if (l.height > 0) l.height *= vertical ? sx : sy;
+      l.width *= sw;
+      if (l.height > 0) l.height *= sh;
       l.fontSize = Math.max(4, Math.round(l.fontSize * Math.min(sx, sy) * 10) / 10);
     } else {
-      l.width *= vertical ? sy : sx;
-      l.height *= vertical ? sx : sy;
+      l.width *= sw;
+      l.height *= sh;
+    }
+
+    if (l.type === 'image' && l.rotation === 0 && vx >= from.w * 0.9 && vy >= old.H * 0.9) {
+      // Fond qui couvre son panneau : recadré exactement sur le nouveau panneau (comme « Remplir »),
+      // pour ne pas grossir à chaque changement de format.
+      Object.assign(l, coverRect(geo, panel, l.width, l.height));
+    } else if (l.rotation === 0 && l.type === 'text' && l.height === 0) {
+      // Texte droit sans hauteur fixe : on garde son coin haut-gauche (sa hauteur réelle dépend de la police).
+      l.x = to.x + (l.x - from.x) * sx;
+      l.y *= sy;
+    } else {
+      // On replace l'élément autour de son nouveau centre, avec la même rotation.
+      const ncx = to.x + (cx - from.x) * sx;
+      const ncy = cy * sy;
+      const h1 = l.height > 0 ? l.height : textHeight(l);
+      l.x = ncx - (l.width / 2) * cos + (h1 / 2) * sin;
+      l.y = ncy - (l.width / 2) * sin - (h1 / 2) * cos;
     }
   }
   // Disque ↔ cartouche : la deuxième surface change de taille, ses éléments suivent.

@@ -145,13 +145,24 @@ export interface ShelfEntry {
   id: string;
   title: string;
   updatedAt: number;
-  /** Aperçus en JPEG : la tranche et la face avant. */
+  /** Aperçus en JPEG : la tranche, la face avant, le dos, et la rondelle ou la cartouche. */
   spine?: string;
   front?: string;
+  back?: string;
+  media?: string;
+  /** Date de la première sauvegarde. */
+  createdAt?: number;
+  /** Nombre d'éléments sur le boîtier et sur la rondelle (ou la cartouche). */
+  layerCount?: number;
+  mediaCount?: number;
   /** Largeur de la tranche en mm, pour dessiner l'étagère à l'échelle. */
   spineMm: number;
   /** Hauteur de la jaquette en mm (183 pour les anciennes entrées, format DVD). */
   heightMm?: number;
+  /** Largeur de la face avant en mm, pour la boîte vue de biais. */
+  frontMm?: number;
+  /** Format du boîtier (« dvd » pour les anciennes entrées). */
+  template?: string;
 }
 
 async function tx<T>(stores: string[], mode: IDBTransactionMode, fn: (t: IDBTransaction) => IDBRequest<T> | void): Promise<T> {
@@ -182,7 +193,10 @@ export async function listShelf(): Promise<ShelfEntry[]> {
 export async function saveToShelf(entry: ShelfEntry, project: ProjectFile): Promise<void> {
   try {
     await tx([SHELF_STORE, PROJECT_STORE, STORE], 'readwrite', (t) => {
-      t.objectStore(SHELF_STORE).put(entry);
+      const shelf = t.objectStore(SHELF_STORE);
+      // On garde la date de création de l'entrée existante.
+      const prev = shelf.get(entry.id) as IDBRequest<ShelfEntry | undefined>;
+      prev.onsuccess = () => shelf.put({ ...entry, createdAt: prev.result?.createdAt ?? entry.createdAt ?? entry.updatedAt });
       t.objectStore(PROJECT_STORE).put(project, entry.id);
       t.objectStore(STORE).put(entry.id, 'currentId');
     });
@@ -197,6 +211,40 @@ export async function loadFromShelf(id: string): Promise<ProjectFile | null> {
   } catch {
     return null;
   }
+}
+
+/** Complète la fiche d'une jaquette (aperçus régénérés, compteurs…) sans toucher au projet. */
+export async function patchShelfEntry(id: string, patch: Partial<ShelfEntry>): Promise<void> {
+  await tx([SHELF_STORE], 'readwrite', (t) => {
+    const shelf = t.objectStore(SHELF_STORE);
+    const e = shelf.get(id) as IDBRequest<ShelfEntry | undefined>;
+    e.onsuccess = () => e.result && shelf.put({ ...e.result, ...patch, id });
+  });
+}
+
+/** Renomme une jaquette de l'étagère (titre de la fiche et du projet). */
+export async function renameInShelf(id: string, title: string): Promise<void> {
+  await tx([SHELF_STORE, PROJECT_STORE], 'readwrite', (t) => {
+    const shelf = t.objectStore(SHELF_STORE);
+    const projects = t.objectStore(PROJECT_STORE);
+    const e = shelf.get(id) as IDBRequest<ShelfEntry | undefined>;
+    e.onsuccess = () => e.result && shelf.put({ ...e.result, title });
+    const p = projects.get(id) as IDBRequest<ProjectFile | undefined>;
+    p.onsuccess = () => p.result && projects.put({ ...p.result, doc: { ...p.result.doc, title } }, id);
+  });
+}
+
+/** Copie une jaquette de l'étagère sous un nouvel identifiant. */
+export async function duplicateInShelf(id: string, newId: string, title: string): Promise<void> {
+  await tx([SHELF_STORE, PROJECT_STORE], 'readwrite', (t) => {
+    const shelf = t.objectStore(SHELF_STORE);
+    const projects = t.objectStore(PROJECT_STORE);
+    const now = Date.now();
+    const e = shelf.get(id) as IDBRequest<ShelfEntry | undefined>;
+    e.onsuccess = () => e.result && shelf.put({ ...e.result, id: newId, title, updatedAt: now, createdAt: now });
+    const p = projects.get(id) as IDBRequest<ProjectFile | undefined>;
+    p.onsuccess = () => p.result && projects.put({ ...p.result, doc: { ...p.result.doc, title } }, newId);
+  });
 }
 
 export async function deleteFromShelf(id: string): Promise<void> {

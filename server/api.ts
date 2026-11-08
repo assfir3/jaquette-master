@@ -188,12 +188,25 @@ async function sgdbSearch(q: string, env: Env): Promise<SearchResult[]> {
     `${SGDB}/search/autocomplete/${encodeURIComponent(q)}`,
     { authorization: `Bearer ${env.STEAMGRIDDB_API_KEY}` },
   );
-  return (data.data ?? []).map((g) => ({
+  const games = (data.data ?? []).slice(0, 12);
+  // L'autocomplétion ne donne pas d'image : on prend une jaquette par jeu, en parallèle.
+  const thumbs = await Promise.all(games.map((g) => sgdbThumb(g.id, env).catch(() => undefined)));
+  return games.map((g, i) => ({
     source: 'steamgriddb',
     id: String(g.id),
     name: g.name,
     year: g.release_date ? String(new Date(g.release_date * 1000).getFullYear()) : undefined,
+    thumb: thumbs[i],
   }));
+}
+
+/** Miniature d'un jeu SteamGridDB : jaquette horizontale de préférence (comme celles de Steam), sinon la première. */
+async function sgdbThumb(id: number, env: Env): Promise<string | undefined> {
+  const r = await getJson<{ data: SgdbImage[] }>(`${SGDB}/grids/game/${id}?types=static&nsfw=false&humor=false`, {
+    authorization: `Bearer ${env.STEAMGRIDDB_API_KEY}`,
+  });
+  const list = (r.data ?? []).filter((i) => !i.nsfw && !i.humor);
+  return (list.find((i) => i.width > i.height) ?? list[0])?.thumb;
 }
 
 // ---------- Steam ----------

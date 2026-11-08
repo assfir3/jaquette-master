@@ -60,14 +60,52 @@ export interface TextLayer extends LayerBase {
   /** Épaisseur du contour, en mm (0 = aucun). */
   strokeWidth: number;
   shadow: boolean;
+  gradient?: Gradient;
 }
 
+/**
+ * Dégradé de couleur ; remplace la couleur unie quand il est présent.
+ * Les couleurs acceptent la transparence (#rrggbbaa ou rgba()).
+ */
+export interface Gradient {
+  from: string;
+  to: string;
+  /** Couleur intermédiaire facultative, au milieu. */
+  via?: string;
+  /** Linéaire (par défaut) ou radial (du centre vers les bords). */
+  kind?: 'linear' | 'radial';
+  /** Direction du dégradé linéaire, comme en CSS : 0° vers le haut, 90° vers la droite, 180° (par défaut) vers le bas. */
+  angle?: number;
+}
+
+export type ShapeKind = 'rect' | 'ellipse' | 'triangle' | 'diamond' | 'polygon' | 'star' | 'arrow' | 'heart';
+
+export const SHAPES: { kind: ShapeKind; label: string; icon: string }[] = [
+  { kind: 'rect', label: 'Rectangle', icon: '■' },
+  { kind: 'ellipse', label: 'Ellipse', icon: '●' },
+  { kind: 'triangle', label: 'Triangle', icon: '▲' },
+  { kind: 'diamond', label: 'Losange', icon: '◆' },
+  { kind: 'polygon', label: 'Polygone', icon: '⬢' },
+  { kind: 'star', label: 'Étoile', icon: '★' },
+  { kind: 'arrow', label: 'Flèche', icon: '➜' },
+  { kind: 'heart', label: 'Cœur', icon: '♥' },
+];
+
+/** Forme géométrique (rectangle, ellipse, étoile…). Le type reste « rect » pour les anciens fichiers. */
 export interface RectLayer extends LayerBase {
   type: 'rect';
+  /** Rectangle quand absent. */
+  shape?: ShapeKind;
   fill: string;
   cornerRadius: number;
-  /** Dégradé vertical du haut vers le bas ; remplace `fill` quand il est présent. */
-  gradient?: { from: string; to: string };
+  gradient?: Gradient;
+  /** Nombre de côtés (polygone) ou de branches (étoile). */
+  sides?: number;
+  /** Creux de l'étoile : rayon intérieur / rayon extérieur. */
+  innerRatio?: number;
+  strokeColor?: string;
+  /** Épaisseur du contour, en mm (0 = aucun). */
+  strokeWidth?: number;
 }
 
 export type Layer = ImageLayer | TextLayer | RectLayer;
@@ -379,6 +417,33 @@ export function newRectLayer(geo: Geometry, target: ClipTarget): RectLayer {
   };
 }
 
+/** Forme posée au centre d'un panneau (ou de la rondelle). */
+export function newShapeLayer(geo: Geometry, kind: ShapeKind, panel: PanelId = 'front'): RectLayer {
+  const p = geo.disc ? { x: 0, w: geo.W } : geo.panels[panel];
+  const size = Math.min(40, p.w * 0.4);
+  const width = kind === 'arrow' ? size * 1.5 : size;
+  const label = SHAPES.find((s) => s.kind === kind)?.label ?? 'Forme';
+  return {
+    id: uid(),
+    type: 'rect',
+    shape: kind,
+    name: label,
+    x: p.x + (p.w - width) / 2,
+    y: (geo.H - size) / 2,
+    width,
+    height: size,
+    rotation: 0,
+    opacity: 1,
+    clip: 'all',
+    fill: '#ff5a3c',
+    cornerRadius: 0,
+    sides: kind === 'star' ? 5 : 6,
+    innerRatio: 0.45,
+    strokeColor: '#ffffff',
+    strokeWidth: 0,
+  };
+}
+
 /** Résolution réelle d'une image une fois imprimée à sa taille. */
 export function effectiveDpi(asset: Asset, layer: { width: number }): number {
   return Math.round(asset.width / (layer.width / 25.4));
@@ -394,6 +459,24 @@ export function coverCrop(iw: number, ih: number, w: number, h: number): ImageLa
   }
   const height = ratio / target;
   return { x: 0, y: (1 - height) / 2, width: 1, height };
+}
+
+/** Décompose une couleur (#rgb, #rrggbb, #rrggbbaa ou rgba()) en teinte hexadécimale et opacité. */
+export function parseColor(c: string): { hex: string; alpha: number } {
+  const m = c.match(/rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:[\s,/]+([\d.]+))?/);
+  if (m) {
+    const hex = '#' + [m[1], m[2], m[3]].map((v) => Math.min(255, Number(v)).toString(16).padStart(2, '0')).join('');
+    return { hex, alpha: m[4] === undefined ? 1 : Number(m[4]) };
+  }
+  let h = c.replace('#', '');
+  if (h.length === 3 || h.length === 4) h = [...h].map((x) => x + x).join('');
+  return { hex: '#' + (h.slice(0, 6) || '000000'), alpha: h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1 };
+}
+
+/** Couleur au format #rrggbb, ou #rrggbbaa si elle est transparente. */
+export function formatColor(hex: string, alpha: number): string {
+  const a = Math.round(Math.max(0, Math.min(1, alpha)) * 255);
+  return a === 255 ? hex : hex + a.toString(16).padStart(2, '0');
 }
 
 /** Couleur hexadécimale avec transparence, au format rgba(). */

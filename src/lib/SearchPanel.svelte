@@ -4,6 +4,7 @@
   import { editor } from './editor.svelte';
   import { coverRect, geometry, newImageLayer, newTextLayer, PANEL_LABELS, type ClipTarget } from './model';
   import { placeLogo } from './logos';
+  import KeysPanel from './KeysPanel.svelte';
   import {
     VISUAL_MIME,
     findMoby,
@@ -59,15 +60,32 @@
   let loadingPacks = $state(false);
   let mobyError = $state<string | null>(null);
 
-  onMount(() => {
-    if (!query && editor.doc.title) query = editor.doc.title;
-    getStatus()
+  /** Clés présentes dans le fichier de configuration du serveur (et non saisies dans l'interface). */
+  let fromFile = $state({ steamgriddb: false, mobygames: false });
+  /** Panneau des clés ouvert au premier affichage s'il manque la clé SteamGridDB (puis laissé tel quel). */
+  let keysOpen = $state<boolean | null>(null);
+
+  function refreshStatus() {
+    return getStatus()
       .then((s) => {
+        const hadMoby = hasMoby;
         hasSgdb = s.steamgriddb;
         configFile = s.configFile ?? configFile;
         hasMoby = s.mobygames;
+        keysOpen ??= !s.steamgriddb;
+        fromFile = {
+          steamgriddb: s.steamgriddb && !s.userKeys?.steamgriddb,
+          mobygames: s.mobygames && !s.userKeys?.mobygames,
+        };
+        // Nouvelle clé MobyGames pendant qu'une fiche est ouverte : on relance la recherche des jaquettes.
+        if (hasMoby && !hadMoby && game) loadMoby(game.name);
       })
       .catch(() => {});
+  }
+
+  onMount(() => {
+    if (!query && editor.doc.title) query = editor.doc.title;
+    refreshStatus();
   });
 
   async function runSearch(e?: Event) {
@@ -406,10 +424,14 @@
     {/if}
     {#if !hasSgdb}
       <p class="note">
-        Recherche via Steam uniquement. Ajoute une clé <strong>SteamGridDB</strong> (gratuite) dans
-        <code class="path">{configFile}</code> pour plus de jaquettes et de logos, et les jeux hors Steam.
+        Recherche via Steam uniquement. Ajoute une clé <strong>SteamGridDB</strong> (gratuite) ci-dessous
+        pour plus de jaquettes et de logos, et les jeux hors Steam.
       </p>
     {/if}
+  {/if}
+
+  {#if keysOpen !== null}
+    <KeysPanel open={keysOpen} {fromFile} {configFile} onchange={refreshStatus} />
   {/if}
 </div>
 

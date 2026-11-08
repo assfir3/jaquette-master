@@ -1,19 +1,27 @@
 import type { CoverPack, GameDetails, MobyGame, SearchResult, Visual } from '../../server/api';
 import { editor } from './editor.svelte';
 import type { LoadedAsset } from './render';
+import { keyHeaders, type KeyService } from './keys.svelte';
 import { readAsDataUrl } from './storage';
 
 export type { CoverPack, GameDetails, MobyGame, SearchResult, Visual };
 
 async function api<T>(path: string): Promise<T> {
-  const res = await fetch(`/api/${path}`);
+  const res = await fetch(`/api/${path}`, { headers: keyHeaders() });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error ?? `Erreur ${res.status}`);
   return data as T;
 }
 
-export const getStatus = () =>
-  api<{ steam: boolean; steamgriddb: boolean; mobygames: boolean; configFile: string }>('status');
+export interface ApiStatus {
+  steam: boolean;
+  steamgriddb: boolean;
+  mobygames: boolean;
+  userKeys?: Record<KeyService, boolean>;
+  configFile: string;
+}
+export const getStatus = () => api<ApiStatus>('status');
+export const checkKey = (service: KeyService) => api<{ ok: boolean; error?: string }>(`keys/check/${service}`);
 export const findMoby = (title: string) => api<MobyGame | null>(`moby/find?title=${encodeURIComponent(title)}`);
 export const getCoverPacks = (game: number, platform: number) => api<CoverPack[]>(`moby/covers?game=${game}&platform=${platform}`);
 export const searchGames = (q: string) => api<SearchResult[]>(`search?q=${encodeURIComponent(q)}`);

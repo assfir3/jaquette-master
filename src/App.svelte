@@ -18,6 +18,8 @@
     newDoc,
     newImageLayer,
     newRectLayer,
+    newShapeLayer,
+    SHAPES,
     newSpineTitle,
     newTextLayer,
     uid,
@@ -289,7 +291,23 @@
     }
   }
 
-  const layerIcon = { image: '▣', text: 'T', rect: '■' } as const;
+  function layerIcon(l: Layer): string {
+    if (l.type === 'image') return '▣';
+    if (l.type === 'text') return 'T';
+    return SHAPES.find((s) => s.kind === (l.shape ?? 'rect'))?.icon ?? '■';
+  }
+
+  /** Forme centrée sur la face (ou la rondelle). */
+  function addShape(kind: (typeof SHAPES)[number]['kind']) {
+    addLayer(newShapeLayer(geo, kind));
+  }
+  /** Calque de fond en dégradé, placé tout derrière. */
+  function addGradientBackground() {
+    const r = geo.disc ? { x: 0, y: 0, width: geo.W, height: geo.H } : { x: -geo.bleed, y: -geo.bleed, width: geo.W + 2 * geo.bleed, height: geo.H + 2 * geo.bleed };
+    const layer = { ...newShapeLayer(geo, 'rect'), ...r, name: 'Fond dégradé', fill: '#1a1f2c', gradient: { from: '#ff5a3c', via: '#7b1fa2', to: '#0d1018', angle: 160 } };
+    addLayer(layer);
+    editor.moveLayer(layer.id, 'back');
+  }
 </script>
 
 <svelte:window onkeydown={onKey} onpaste={onPaste} onclick={() => (exportOpen = false)} />
@@ -416,6 +434,13 @@
         <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', doc.title || 'TITRE DU JEU'), name: 'Titre', y: 22, x: 20, width: 80 })}>Titre</button>
         <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', 'DISQUE 1'), name: 'Texte bas', fontFamily: 'Inter', fontSize: 9, y: 92, x: 30, width: 60, shadow: false })}>Texte bas</button>
       </div>
+      <h3 class="sub">Formes</h3>
+      <div class="shape-grid">
+        {#each SHAPES as sh}
+          <button title={sh.label} aria-label={`Ajouter : ${sh.label}`} onclick={() => addShape(sh.kind)}>{sh.icon}</button>
+        {/each}
+      </div>
+      <button onclick={addGradientBackground}>Fond en dégradé</button>
     </section>
     {:else}
     <section>
@@ -464,6 +489,13 @@
         <button onclick={() => addLayer({ ...newRectLayer(geo, 'front'), name: 'Bandeau face' })}>Bandeau face</button>
         <button onclick={() => addLayer({ ...newRectLayer(geo, 'back'), name: 'Bandeau dos', y: geo.H + geo.bleed - 22 })}>Bandeau dos</button>
       </div>
+      <h3 class="sub">Formes</h3>
+      <div class="shape-grid">
+        {#each SHAPES as sh}
+          <button title={sh.label} aria-label={`Ajouter : ${sh.label}`} onclick={() => addShape(sh.kind)}>{sh.icon}</button>
+        {/each}
+      </div>
+      <button onclick={addGradientBackground}>Fond en dégradé</button>
     </section>
     {/if}
 
@@ -476,7 +508,7 @@
         {#each [...editor.layers].reverse() as l (l.id)}
           <li class:selected={l.id === editor.selectedId}>
             <button class="pick" onclick={() => (editor.selectedId = l.id)}>
-              <span class="ic">{layerIcon[l.type]}</span>
+              <span class="ic">{layerIcon(l)}</span>
               <span class="nm">{l.name}</span>
               {#if l.locked}<span class="tag">🔒</span>{/if}
             </button>
@@ -544,6 +576,23 @@
 {/if}
 
 <style>
+  .sub {
+    margin: 4px 0 0;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .shape-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+  }
+  .shape-grid button {
+    padding: 6px 0;
+    font-size: 15px;
+  }
   .app {
     display: grid;
     grid-template-columns: 300px 1fr 280px;

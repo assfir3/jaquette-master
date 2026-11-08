@@ -36,7 +36,7 @@ npm run dist:win   # fabrique le .exe (sur Windows)
 Onglet **Recherche** : on tape le nom du jeu, on choisit le résultat, puis **Créer la jaquette automatiquement**.
 Les visuels viennent de Steam (sans clé) : jaquette verticale, grand fond, logo transparent, captures, résumé en français, développeur, éditeur, année.
 
-Optionnel : une clé **SteamGridDB** (gratuite, sur steamgriddb.com → Profil → Préférences → API) ajoute des dizaines de jaquettes et logos créés par la communauté, et les jeux hors Steam :
+Optionnel : une clé **SteamGridDB** (gratuite, sur steamgriddb.com → Profil → Préférences → API) ajoute des dizaines de jaquettes et logos créés par la communauté, et les jeux hors Steam. Colle-la dans **Clés d'API**, en bas de l'onglet Recherche : elle est vérifiée tout de suite et gardée sur l'appareil. Même chose pour la clé MobyGames. Pour une installation partagée, les clés peuvent aussi aller dans un fichier :
 
 ```bash
 cp .env.example .env.local   # puis colle la clé dans STEAMGRIDDB_API_KEY
@@ -54,7 +54,7 @@ Dans la fiche d'un jeu, choisis un modèle avant **Créer la jaquette automatiqu
 
 ## Jaquettes officielles du commerce (MobyGames)
 
-Avec une clé **MobyGames** (`MOBYGAMES_API_KEY` dans `.env.local`), la fiche d'un jeu liste les éditions scannées par pays, éditions françaises en premier. « Utiliser cette édition » pose la vraie face, le vrai dos et le disque. Sans clé, cette partie est simplement masquée. Usage personnel uniquement ; l'usage commercial demande l'accord de MobyGames.
+Avec une clé **MobyGames** (dans **Clés d'API**, ou `MOBYGAMES_API_KEY` dans `.env.local`), la fiche d'un jeu liste les éditions scannées par pays, éditions françaises en premier. « Utiliser cette édition » pose la vraie face, le vrai dos et le disque. Sans clé, cette partie est simplement masquée. Usage personnel uniquement ; l'usage commercial demande l'accord de MobyGames.
 
 ## Aperçu 3D
 
@@ -78,6 +78,12 @@ Chaque image peut être recolorée en blanc, en noir ou dans une teinte au choix
 « Mes logos » garde tes propres logos d'un projet à l'autre (stockés dans le navigateur).
 
 Les logos sont téléchargés à la demande, jamais livrés avec l'outil : ce sont des marques de leurs propriétaires.
+
+## Formes et dégradés
+
+Onglet **Mise en page › Formes** : rectangle, ellipse, triangle, losange, polygone (3 à 16 côtés), étoile (branches et creux réglables), flèche et cœur, avec contour au choix. **Fond en dégradé** pose un fond qui couvre toute la surface, tout derrière.
+
+La couleur d'une forme ou d'un texte peut être **unie**, en **dégradé** linéaire (direction libre, 8 raccourcis) ou **radial**, avec 2 ou 3 couleurs et une opacité par couleur (pour un fondu vers le transparent). Huit dégradés sont prêts à l'emploi.
 
 ## Rondelle CD/DVD
 

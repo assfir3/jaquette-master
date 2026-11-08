@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { DISC, TEMPLATES, geometry, type Doc } from './model';
+import { CART, DISC, TEMPLATES, geometry, usesCartridge, type Doc } from './model';
 import type { LoadedAsset } from './render';
 import { renderToCanvas } from './export';
 import { download, slugify } from './storage';
@@ -331,8 +331,48 @@ export function sheetOf(s: PrintSettings['disc']): DiscSheet {
   return DISC_SHEETS.find((d) => d.id === s.sheet) ?? DISC_SHEETS[0];
 }
 
-/** La rondelle sur une planche d'étiquettes ou une feuille à découper. */
+/**
+ * Étiquettes de cartouche (Switch) sur une feuille A4 de papier autocollant :
+ * une seule ou la feuille remplie (4 × 6), contour de coupe en pointillés.
+ */
+export function cartPlan(doc: Doc, s: PrintSettings['disc'], test = false): SheetPlan {
+  const plan = emptyPlan(210, 297);
+  const b = CART.bleed;
+  const w = CART.width + 2 * b;
+  const h = CART.height + 2 * b;
+  const gap = 10;
+  const cols = s.fill ? 4 : 1;
+  const rows = s.fill ? 6 : 1;
+  const x0 = (210 - (cols * w + (cols - 1) * gap)) / 2;
+  const y0 = 30;
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      const x = x0 + c * (w + gap);
+      const y = y0 + r * (h + gap);
+      if (!test) plan.images.push({ art: 'disc', x, y, w, h });
+      // Contour de coupe : le bord de l'étiquette (sans le fond perdu).
+      const L = x + b, T = y + b, R = L + CART.width, B = T + CART.height;
+      plan.lines.push(
+        { x1: L, y1: T, x2: R, y2: T, dashed: true },
+        { x1: R, y1: T, x2: R, y2: B, dashed: true },
+        { x1: R, y1: B, x2: L, y2: B, dashed: true },
+        { x1: L, y1: B, x2: L, y2: T, dashed: true },
+      );
+    }
+  const bottom = y0 + rows * (h + gap);
+  plan.texts.push({
+    x: 105,
+    y: bottom + 2,
+    align: 'center',
+    text: `${doc.title || 'Sans titre'} · cartouche ${CART.width} × ${CART.height} mm · découper sur les pointillés · 100 %`,
+  });
+  if (test) addRuler(plan, Math.min(bottom + 14, 280));
+  return calibrate(plan, s.calib);
+}
+
+/** La rondelle sur une planche d'étiquettes ou une feuille à découper (ou l'étiquette de cartouche, pour la Switch). */
 export function discPlan(doc: Doc, s: PrintSettings['disc'], test = false): SheetPlan {
+  if (usesCartridge(doc)) return cartPlan(doc, s, test);
   const sheet = sheetOf(s);
   const plan = emptyPlan(sheet.page.w, sheet.page.h);
   const centers = s.fill ? sheet.centers : sheet.centers.slice(0, 1);
@@ -549,8 +589,9 @@ export async function exportSheet(
 ) {
   const plan = kind === 'case' ? casePlan(doc, settings.case, test) : discPlan(doc, settings.disc, test);
   const arts = await renderArts(doc, assets, artsOf(plan), 300, kind === 'disc' ? sheetOf(settings.disc) : undefined);
-  const name = `${slugify(doc.title)}-${kind === 'case' ? 'jaquette' : 'rondelle'}${test ? '-planche-de-test' : ''}.pdf`;
-  planToPdf(plan, arts, doc, `${doc.title || 'Jaquette'} — ${kind === 'case' ? 'jaquette' : 'rondelle'}`).save(name);
+  const what = kind === 'case' ? 'jaquette' : usesCartridge(doc) ? 'cartouche' : 'rondelle';
+  const name = `${slugify(doc.title)}-${what}${test ? '-planche-de-test' : ''}.pdf`;
+  planToPdf(plan, arts, doc, `${doc.title || 'Jaquette'} — ${what}`).save(name);
 }
 
 /** Impression directe sur CD : image de 120 mm à 300 dpi, transparente, avec sa résolution inscrite. */

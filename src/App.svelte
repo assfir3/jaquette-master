@@ -13,6 +13,13 @@
   import {
     DISC,
     TEMPLATES,
+    CART,
+    cartLabelFrame,
+    mediaName,
+    usesCartridge,
+    applyFormat,
+    caseSize,
+    type TemplateId,
     coverRect,
     geometry,
     newDoc,
@@ -42,6 +49,9 @@
   const doc = $derived(editor.doc);
   const geo = $derived(editor.geo);
   const isDisc = $derived(editor.surface === 'disc');
+  /** Jeu sur cartouche (Switch) : la deuxième surface est l'étiquette de la cartouche. */
+  const cart = $derived(usesCartridge(editor.doc));
+  const media = $derived(mediaName(editor.doc));
   const template = $derived(TEMPLATES[doc.template]);
 
   let imageTarget = $state<ClipTarget>('front');
@@ -108,6 +118,7 @@
         spine: previews?.spine,
         front: previews?.front,
         spineMm: geometry(snapshot).panels.spine.w,
+        heightMm: geometry(snapshot).H,
       },
       file,
     );
@@ -171,7 +182,7 @@
   async function newProject() {
     // La jaquette en cours reste rangée sur l'étagère.
     await saveNow();
-    loadInto(newDoc(), [], uid(), false);
+    loadInto(newDoc(editor.doc), [], uid(), false);
     view = 'atelier';
   }
 
@@ -243,6 +254,20 @@
     }, 'spine');
   }
 
+  /** Change de format de boîtier ; la mise en page suit (annulable avec ⌘Z). */
+  function setFormat(id: TemplateId) {
+    const t = TEMPLATES[id];
+    const size = id === 'custom' ? caseSize(editor.doc) : { height: t.height, panelWidth: t.panelWidth };
+    const spine = id === 'custom' ? editor.doc.spine : t.spineDefault;
+    editor.update((d) => applyFormat(d, id, size, spine));
+  }
+  /** Mesure du format personnalisé. */
+  function setCustom(key: 'height' | 'panelWidth', value: number) {
+    if (!Number.isFinite(value) || value < 40 || value > 400) return;
+    const size = { ...caseSize(editor.doc), [key]: value };
+    editor.update((d) => applyFormat(d, 'custom', size, d.spine), `custom:${key}`);
+  }
+
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     const typing = t.closest('input, textarea, select, [contenteditable]');
@@ -301,6 +326,13 @@
   function addShape(kind: (typeof SHAPES)[number]['kind']) {
     addLayer(newShapeLayer(geo, kind));
   }
+  /** Bandeaux d'une étiquette de cartouche du commerce (remplace ceux déjà posés). */
+  function addCartFrame() {
+    editor.update((d) => {
+      d.disc.layers = [...d.disc.layers.filter((l) => l.role !== 'cart-frame'), ...cartLabelFrame(d)];
+    });
+  }
+
   /** Calque de fond en dégradé, placé tout derrière. */
   function addGradientBackground() {
     const r = geo.disc ? { x: 0, y: 0, width: geo.W, height: geo.H } : { x: -geo.bleed, y: -geo.bleed, width: geo.W + 2 * geo.bleed, height: geo.H + 2 * geo.bleed };
@@ -360,13 +392,22 @@
           <button role="menuitem" onclick={() => runExport('png')}>
             <strong>Image PNG</strong><small>300 dpi, fond perdu compris</small>
           </button>
-          <p class="menu-title">Rondelle</p>
-          <button role="menuitem" onclick={() => runExport('disc-png')} disabled={!doc.disc.layers.length}>
-            <strong>Rondelle PNG</strong><small>Transparent autour et au centre, pour l'impression sur CD</small>
-          </button>
-          <button role="menuitem" onclick={() => runExport('disc-pdf')} disabled={!doc.disc.layers.length}>
-            <strong>Rondelle PDF A4</strong><small>Taille réelle et cercles de découpe (papier autocollant)</small>
-          </button>
+          <p class="menu-title">{media.title}</p>
+          {#if cart}
+            <button role="menuitem" onclick={() => runExport('disc-png')} disabled={!doc.disc.layers.length}>
+              <strong>Étiquette PNG</strong><small>{CART.width} × {CART.height} mm à 300 dpi, fond perdu de {CART.bleed} mm</small>
+            </button>
+            <button role="menuitem" onclick={() => runExport('disc-pdf')} disabled={!doc.disc.layers.length}>
+              <strong>Étiquettes PDF A4</strong><small>6 étiquettes à taille réelle, contour de coupe (papier autocollant)</small>
+            </button>
+          {:else}
+            <button role="menuitem" onclick={() => runExport('disc-png')} disabled={!doc.disc.layers.length}>
+              <strong>Rondelle PNG</strong><small>Transparent autour et au centre, pour l'impression sur CD</small>
+            </button>
+            <button role="menuitem" onclick={() => runExport('disc-pdf')} disabled={!doc.disc.layers.length}>
+              <strong>Rondelle PDF A4</strong><small>Taille réelle et cercles de découpe (papier autocollant)</small>
+            </button>
+          {/if}
         </div>
       {/if}
     </div>
@@ -396,7 +437,10 @@
     <div class="tabpanel" hidden={tab !== 'design'}>
     {#if isDisc}
     <section>
-      <h2>Rondelle</h2>
+      <h2>{media.title}</h2>
+      {#if cart}
+        <p class="dims">Étiquette de cartouche Switch : {CART.width} × {CART.height} mm (coins arrondis), fond perdu de {CART.bleed} mm. Pas de cote officielle : compare avec ta cartouche avant d'imprimer sur du papier autocollant.</p>
+      {:else}
       <label>Bord extérieur imprimable
         <div class="row">
           <select value={DISC.outerPresets.find((p) => p.value === doc.disc.outer)?.value ?? ''} onchange={(e) => setDisc('outer', Number((e.currentTarget as HTMLSelectElement).value))}>
@@ -407,7 +451,7 @@
           <span class="u">mm</span>
         </div>
       </label>
-      <label>Centre imprimable
+        <label>Centre imprimable
         <div class="row">
           <select value={DISC.innerPresets.find((p) => p.value === doc.disc.inner)?.value ?? ''} onchange={(e) => setDisc('inner', Number((e.currentTarget as HTMLSelectElement).value))}>
             {#each DISC.innerPresets as p}<option value={p.value}>{p.label}</option>{/each}
@@ -417,7 +461,8 @@
           <span class="u">mm</span>
         </div>
       </label>
-      <p class="dims">Regarde sur l'emballage de tes CD/DVD imprimables : la zone imprimable y est indiquée (souvent 22–118 mm ou 41–118 mm).</p>
+        <p class="dims">Regarde sur l'emballage de tes CD/DVD imprimables : la zone imprimable y est indiquée (souvent 22–118 mm ou 41–118 mm).</p>
+      {/if}
       <div class="row">
         <label class="inline">Fond
           <input type="color" value={doc.disc.background} oninput={(e) => editor.update((d) => (d.disc.background = (e.currentTarget as HTMLInputElement).value), 'disc:bg')} />
@@ -429,11 +474,18 @@
     <section>
       <h2>Ajouter</h2>
       <button class="primary" onclick={() => fileInput.click()}>＋ Image</button>
-      <p class="hint">Ou glisse une image sur la rondelle, ou colle-la avec ⌘V.</p>
-      <div class="grid2">
-        <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', doc.title || 'TITRE DU JEU'), name: 'Titre', y: 22, x: 20, width: 80 })}>Titre</button>
-        <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', 'DISQUE 1'), name: 'Texte bas', fontFamily: 'Inter', fontSize: 9, y: 92, x: 30, width: 60, shadow: false })}>Texte bas</button>
-      </div>
+      <p class="hint">Ou glisse une image sur {media.lower}, ou colle-la avec ⌘V.</p>
+      {#if cart}
+        <div class="grid2">
+          <button onclick={addCartFrame} title="Bandeau rouge et logo en haut, bandeau noir et code du jeu en bas">Bandeaux officiels</button>
+          <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', doc.title || 'TITRE DU JEU'), name: 'Titre', x: 1, y: 7, width: geo.W - 2, fontSize: 7 })}>Titre</button>
+        </div>
+      {:else}
+        <div class="grid2">
+          <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', doc.title || 'TITRE DU JEU'), name: 'Titre', y: 22, x: 20, width: 80 })}>Titre</button>
+          <button onclick={() => addLayer({ ...newTextLayer(geo, 'front', 'DISQUE 1'), name: 'Texte bas', fontFamily: 'Inter', fontSize: 9, y: 92, x: 30, width: 60, shadow: false })}>Texte bas</button>
+        </div>
+      {/if}
       <h3 class="sub">Formes</h3>
       <div class="shape-grid">
         {#each SHAPES as sh}
@@ -446,16 +498,29 @@
     <section>
       <h2>Jaquette</h2>
       <label>Format
-        <select value={doc.template} disabled>
-          {#each Object.values(TEMPLATES) as t}<option value={t.id}>{t.name}</option>{/each}
+        <select value={doc.template} onchange={(e) => setFormat((e.currentTarget as HTMLSelectElement).value as TemplateId)}>
+          {#each Object.values(TEMPLATES) as t}<option value={t.id} title={t.hint}>{t.name}</option>{/each}
         </select>
       </label>
+      <p class="dims">{template.hint}</p>
+      {#if doc.template === 'custom'}
+        <div class="grid2 custom">
+          <label>Hauteur
+            <div class="row"><input class="mm" type="number" min="40" max="400" step="0.5" value={caseSize(doc).height} onchange={(e) => setCustom('height', Number((e.currentTarget as HTMLInputElement).value))} /><span class="u">mm</span></div>
+          </label>
+          <label>Largeur d'une face
+            <div class="row"><input class="mm" type="number" min="40" max="400" step="0.5" value={caseSize(doc).panelWidth} onchange={(e) => setCustom('panelWidth', Number((e.currentTarget as HTMLInputElement).value))} /><span class="u">mm</span></div>
+          </label>
+        </div>
+      {/if}
       <label>Épaisseur de la tranche
         <div class="row">
-          <select value={template.spinePresets.find((p) => p.value === doc.spine)?.value ?? ''} onchange={(e) => setSpine(Number((e.currentTarget as HTMLSelectElement).value))}>
-            {#each template.spinePresets as p}<option value={p.value}>{p.label}</option>{/each}
-            <option value="" disabled>Personnalisée</option>
-          </select>
+          {#if template.spinePresets.length}
+            <select value={template.spinePresets.find((p) => p.value === doc.spine)?.value ?? ''} onchange={(e) => setSpine(Number((e.currentTarget as HTMLSelectElement).value))}>
+              {#each template.spinePresets as p}<option value={p.value}>{p.label}</option>{/each}
+              <option value="" disabled>Personnalisée</option>
+            </select>
+          {/if}
           <input class="mm" type="number" min="3" max="60" step="0.5" value={doc.spine} onchange={(e) => setSpine(Number((e.currentTarget as HTMLInputElement).value))} />
           <span class="u">mm</span>
         </div>
@@ -539,8 +604,13 @@
     {#if ready && !show3d && editor.layers.length === 0}
       <div class="welcome">
         {#if isDisc}
-          <h1>La rondelle du disque</h1>
-          <p>Glisse une image sur le disque, ou crée la jaquette automatiquement depuis la <strong>Recherche</strong> : la rondelle est faite en même temps.</p>
+          {#if cart}
+            <h1>L'étiquette de la cartouche</h1>
+            <p>Glisse une image sur l'étiquette, ou crée la jaquette automatiquement depuis la <strong>Recherche</strong> : l'étiquette est faite en même temps.</p>
+          {:else}
+            <h1>La rondelle du disque</h1>
+            <p>Glisse une image sur le disque, ou crée la jaquette automatiquement depuis la <strong>Recherche</strong> : la rondelle est faite en même temps.</p>
+          {/if}
         {:else}
           <h1>Ta jaquette commence ici</h1>
           <p>Cherche ton jeu à gauche et clique sur <strong>Créer la jaquette automatiquement</strong>, ou glisse tes propres images sur la face et le dos.</p>
@@ -553,7 +623,7 @@
         <span class="v-case" aria-hidden="true"><i></i><b></b><i></i></span>Boîtier
       </button>
       <button role="tab" aria-selected={isDisc && !show3d} class:on={isDisc && !show3d} onclick={() => ((show3d = false), editor.setSurface('disc'))}>
-        <span class="v-disc" aria-hidden="true"><i></i></span>Rondelle
+        <span class={cart ? 'v-cart' : 'v-disc'} aria-hidden="true"><i></i></span>{media.title}
       </button>
       <button role="tab" aria-selected={show3d} class:on={show3d} onclick={() => ((show3d = true), (editor.selectedId = null))}>
         <span class="v-3d" aria-hidden="true"><i></i></span>Aperçu 3D
@@ -768,6 +838,12 @@
     height: 36px;
     border-radius: 50%;
     background: radial-gradient(circle, var(--surface) 0 4px, #59627a 4.5px 9px, #3a4256 9.5px);
+  }
+  .v-cart i {
+    width: 24px;
+    height: 34px;
+    border-radius: 3px 3px 4px 4px;
+    background: linear-gradient(#3a4256 0 22%, #59627a 22% 92%, #3a4256 92%);
   }
   .v-3d i {
     width: 24px;

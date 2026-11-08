@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { editor } from './editor.svelte';
-  import { DISC, type Doc } from './model';
+  import { CART, DISC, mediaName, usesCartridge, type Doc } from './model';
   import {
     CD_PRINTERS,
     DISC_SHEETS,
@@ -43,7 +43,9 @@
     return () => ro.disconnect();
   });
 
-  const direct = $derived(kind === 'disc' && settings.disc.mode === 'direct');
+  /** Jeu sur cartouche (Switch) : étiquettes sur papier autocollant, pas d'impression sur disque. */
+  const cart = $derived(usesCartridge(editor.doc));
+  const direct = $derived(kind === 'disc' && !cart && settings.disc.mode === 'direct');
   const printer = $derived(CD_PRINTERS.find((p) => p.id === settings.disc.printer) ?? CD_PRINTERS[0]);
   const sheet = $derived(sheetOf(settings.disc));
   const innerTooSmall = $derived(!!printer.minInner && editor.doc.disc.inner < printer.minInner);
@@ -152,7 +154,7 @@
       <h1>Impression</h1>
       <div class="seg tabs" role="tablist">
         <button role="tab" aria-selected={kind === 'case'} class:on={kind === 'case'} onclick={() => (kind = 'case')}>Jaquette</button>
-        <button role="tab" aria-selected={kind === 'disc'} class:on={kind === 'disc'} onclick={() => (kind = 'disc')}>Rondelle</button>
+        <button role="tab" aria-selected={kind === 'disc'} class:on={kind === 'disc'} onclick={() => (kind = 'disc')}>{mediaName(editor.doc).title}</button>
       </div>
     </header>
 
@@ -175,6 +177,12 @@
         <label class="check"><input type="checkbox" bind:checked={settings.case.bleed} />Fond perdu de 3 mm</label>
         <p class="hint">À garder pour une découpe au massicot ou chez un imprimeur. Sans fond perdu, la jaquette est imprimée à sa taille exacte.</p>
         <label class="check"><input type="checkbox" bind:checked={settings.case.marks} />Traits de coupe et de pliage</label>
+      </section>
+    {:else if cart}
+      <section>
+        <h2>Étiquettes de cartouche</h2>
+        <p class="hint">Étiquettes de {CART.width} × {CART.height} mm sur une feuille A4 de papier autocollant, avec {CART.bleed} mm de fond perdu et un contour de coupe. Pas de cote officielle : imprime d’abord la planche de test et pose-la sur ta cartouche.</p>
+        <label class="check"><input type="checkbox" bind:checked={settings.disc.fill} />Remplir la feuille (24 étiquettes)</label>
       </section>
     {:else}
       <section>
@@ -269,7 +277,7 @@
       {/if}
     </div>
     {#if kind === 'disc' && !editor.doc.disc.layers.length}
-      <p class="hint">La rondelle est vide : crée-la d’abord (Recherche › créer la jaquette, ou vue Rondelle).</p>
+      <p class="hint">{cart ? 'L’étiquette est vide : crée-la d’abord (Recherche › créer la jaquette, ou vue Cartouche).' : 'La rondelle est vide : crée-la d’abord (Recherche › créer la jaquette, ou vue Rondelle).'}</p>
     {/if}
     <p class="hint">Dans la fenêtre d’impression, choisis <b>Taille réelle / 100 %</b> et jamais « Ajuster à la page ».</p>
     {#if busy}<p class="hint">{busy}</p>{/if}

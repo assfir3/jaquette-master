@@ -150,6 +150,8 @@ export interface ShelfEntry {
   front?: string;
   /** Largeur de la tranche en mm, pour dessiner l'étagère à l'échelle. */
   spineMm: number;
+  /** Hauteur de la jaquette en mm (183 pour les anciennes entrées, format DVD). */
+  heightMm?: number;
 }
 
 async function tx<T>(stores: string[], mode: IDBTransactionMode, fn: (t: IDBTransaction) => IDBRequest<T> | void): Promise<T> {

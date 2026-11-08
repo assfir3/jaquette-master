@@ -62,7 +62,8 @@
         class:on={selected?.id === e.id}
         role="option"
         aria-selected={selected?.id === e.id}
-        style:aspect-ratio="{Math.max(7, e.spineMm)} / 183"
+        style:aspect-ratio="{Math.max(7, e.spineMm)} / {e.heightMm ?? 183}"
+        style:--h={(e.heightMm ?? 183) / 183}
         style:background-image={e.spine ? `url(${e.spine})` : undefined}
         onclick={() => (picked = e.id)}
         ondblclick={() => onOpen(e.id)}
@@ -136,7 +137,8 @@
   .spine {
     flex: none;
     /* À l'échelle : la largeur suit l'épaisseur réelle de la tranche. */
-    height: clamp(180px, 46vh, 360px);
+    /* Une boîte Switch ou Blu-ray est moins haute qu'un DVD : même échelle pour toutes. */
+    height: calc(clamp(180px, 46vh, 360px) * var(--h, 1));
     padding: 0;
     border: 0;
     border-radius: 2px;

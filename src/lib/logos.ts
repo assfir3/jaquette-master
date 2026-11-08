@@ -175,7 +175,7 @@ const GAP = 3;
 export function placeLogo(geo: Geometry, layers: Layer[], asset: LoadedAsset, zone: PanelId, name: string): ImageLayer {
   const p = geo.panels[zone];
   const s = geo.safe;
-  const role = geo.disc ? 'logo:disc' : `logo:${zone}`;
+  const role = geo.disc || geo.cart ? 'logo:disc' : `logo:${zone}`;
   const siblings = layers.filter((l) => l.role === role && !l.hidden);
   const ratio = asset.width / asset.height;
 
@@ -193,6 +193,13 @@ export function placeLogo(geo: Geometry, layers: Layer[], asset: LoadedAsset, zo
     // Le premier est centré, les suivants se rangent à sa droite.
     x = siblings.length ? Math.max(...siblings.map((l) => l.x + l.width + GAP)) : c - width / 2;
     y = c + (geo.disc.inner + geo.disc.outer) / 4 - height / 2;
+  } else if (geo.cart) {
+    // Étiquette de cartouche : petite rangée centrée en bas.
+    height = 3;
+    width = Math.min(height * ratio, geo.W - 2 * s);
+    height = width / ratio;
+    x = siblings.length ? Math.max(...siblings.map((l) => l.x + l.width + 0.8)) : (geo.W - width) / 2;
+    y = geo.H - s - height;
   } else if (zone === 'spine') {
     const maxW = p.w - 3;
     height = HEIGHT.spine;

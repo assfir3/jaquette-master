@@ -114,6 +114,8 @@ export interface Doc {
   version: 1;
   title: string;
   template: TemplateId;
+  /** Mesures du format « Personnalisé » (mm). */
+  custom?: { height: number; panelWidth: number };
   spine: number;
   background: string;
   layers: Layer[];
@@ -158,6 +160,7 @@ export function newDisc(): DiscSettings {
 /** Complète un document ancien ou incomplet (fichiers enregistrés avant la rondelle). */
 export function normalizeDoc(doc: Doc): Doc {
   if (!doc.disc) doc.disc = newDisc();
+  if (!(doc.template in TEMPLATES)) doc.template = 'dvd';
   if (!Array.isArray(doc.disc.layers)) doc.disc.layers = [];
   return doc;
 }
@@ -171,11 +174,13 @@ export interface Asset {
 
 // ---------- Gabarits ----------
 
-export type TemplateId = 'dvd';
+export type TemplateId = 'dvd' | 'bluray' | 'ps3' | 'ps4' | 'switch' | 'switch2' | 'custom';
 
 export interface CaseTemplate {
   id: TemplateId;
   name: string;
+  /** Consoles et supports qui utilisent ce boîtier. */
+  hint: string;
   height: number;
   /** Largeur de la face avant (identique au dos). */
   panelWidth: number;
@@ -186,21 +191,179 @@ export interface CaseTemplate {
   safe: number;
 }
 
+// Dimensions de la jaquette glissée sous le film (format fini, sans fond perdu).
+// Les fabricants varient de 1 à 2 mm : en cas de doute, mesure ta boîte et choisis « Personnalisé ».
 export const TEMPLATES: Record<TemplateId, CaseTemplate> = {
   dvd: {
     id: 'dvd',
-    name: 'Boîtier DVD',
+    name: 'DVD / PS2 / Xbox 360 / Wii',
+    hint: 'Boîtier DVD standard : PC, PS2, Xbox, Xbox 360, Wii, Wii U, films DVD',
     height: 183,
     panelWidth: 129.5,
     spineDefault: 14,
     spinePresets: [
       { label: 'Standard (14 mm)', value: 14 },
       { label: 'Fin (7 mm)', value: 7 },
+      { label: 'Double (22 mm)', value: 22 },
     ],
     bleed: 3,
     safe: 4,
   },
+  bluray: {
+    id: 'bluray',
+    name: 'Blu-ray',
+    hint: 'Boîtier Blu-ray de film (bandeau bleu moulé en haut du boîtier)',
+    height: 148,
+    panelWidth: 128.5,
+    spineDefault: 12,
+    spinePresets: [
+      { label: 'Standard (12 mm)', value: 12 },
+      { label: 'Fin (7 mm)', value: 7 },
+      { label: 'Épais (14 mm)', value: 14 },
+    ],
+    bleed: 3,
+    safe: 4,
+  },
+  ps3: {
+    id: 'ps3',
+    name: 'PS3',
+    hint: 'Boîtier PlayStation 3 (taille Blu-ray, bandeau PS3 imprimé sur la jaquette)',
+    height: 150,
+    panelWidth: 128,
+    spineDefault: 14,
+    spinePresets: [{ label: 'Standard (14 mm)', value: 14 }],
+    bleed: 3,
+    safe: 4,
+  },
+  ps4: {
+    id: 'ps4',
+    name: 'PS4 / PS5 / Xbox One / Series',
+    hint: 'Boîtiers PS4, PS5, Xbox One et Xbox Series (jaquette sur toute la hauteur)',
+    height: 160,
+    panelWidth: 130,
+    spineDefault: 13,
+    spinePresets: [
+      { label: 'Standard (13 mm)', value: 13 },
+      { label: '14 mm', value: 14 },
+    ],
+    bleed: 3,
+    safe: 4,
+  },
+  switch: {
+    id: 'switch',
+    name: 'Nintendo Switch',
+    hint: 'Boîtier Nintendo Switch (cartouche grise)',
+    height: 161,
+    panelWidth: 99,
+    spineDefault: 10,
+    spinePresets: [
+      { label: 'Standard (10 mm)', value: 10 },
+      { label: 'Double (14 mm)', value: 14 },
+    ],
+    bleed: 3,
+    safe: 3,
+  },
+  switch2: {
+    id: 'switch2',
+    name: 'Nintendo Switch 2',
+    hint: 'Boîtier Nintendo Switch 2 (cartouche rouge)',
+    height: 161,
+    panelWidth: 99,
+    spineDefault: 10,
+    spinePresets: [
+      { label: 'Standard (10 mm)', value: 10 },
+      { label: 'Double (14 mm)', value: 14 },
+    ],
+    bleed: 3,
+    safe: 3,
+  },
+  custom: {
+    id: 'custom',
+    name: 'Personnalisé',
+    hint: 'Mesure ta jaquette (hauteur, largeur d\'une face, tranche)',
+    height: 183,
+    panelWidth: 129.5,
+    spineDefault: 14,
+    spinePresets: [],
+    bleed: 3,
+    safe: 4,
+  },
 };
+
+/** Hauteur et largeur d'une face : celles du gabarit, ou les mesures saisies pour « Personnalisé ». */
+export function caseSize(doc: Doc): { height: number; panelWidth: number } {
+  const t = TEMPLATES[doc.template] ?? TEMPLATES.dvd;
+  if (doc.template === 'custom' && doc.custom) return doc.custom;
+  return { height: t.height, panelWidth: t.panelWidth };
+}
+
+/**
+ * Change de format en gardant la mise en page : chaque élément suit son panneau
+ * (dos, tranche, face) et s'adapte à la nouvelle taille.
+ */
+export function applyFormat(doc: Doc, template: TemplateId, size: { height: number; panelWidth: number }, spine: number) {
+  const old = geometry(doc);
+  const oldMedia = surfaceGeometry(doc, 'disc');
+  doc.template = template;
+  if (template === 'custom') doc.custom = { ...size };
+  doc.spine = spine;
+  const geo = geometry(doc);
+  const sy = geo.H / old.H;
+  for (const l of doc.layers) {
+    // Un élément « toute la jaquette » plus large qu'une face (fond, image panoramique) suit l'ensemble.
+    const panel: ClipTarget =
+      l.clip !== 'all' ? l.clip : l.width > old.panels.front.w ? 'all' : panelAt(old, l.x + l.width / 2);
+    const from = panel === 'all' ? { x: 0, w: old.W } : old.panels[panel];
+    const to = panel === 'all' ? { x: 0, w: geo.W } : geo.panels[panel];
+    const sx = to.w / from.w;
+    const vertical = Math.abs(l.rotation % 180) === 90;
+    l.x = to.x + (l.x - from.x) * sx;
+    l.y *= sy;
+    if (l.type === 'image') {
+      // Une image garde ses proportions. Un fond qui couvre son panneau grandit pour le couvrir encore ;
+      // un logo ou une capture rétrécit pour tenir.
+      const covers = l.width >= from.w * 0.9 && l.height >= old.H * 0.9;
+      const k = covers ? Math.max(sx, sy) : Math.min(sx, sy);
+      const cx = l.x + (l.width * sx) / 2;
+      const cy = l.y + (l.height * sy) / 2;
+      l.width *= k;
+      l.height *= k;
+      l.x = cx - l.width / 2;
+      l.y = cy - l.height / 2;
+    } else if (l.type === 'text') {
+      l.width *= vertical ? sy : sx;
+      if (l.height > 0) l.height *= vertical ? sx : sy;
+      l.fontSize = Math.max(4, Math.round(l.fontSize * Math.min(sx, sy) * 10) / 10);
+    } else {
+      l.width *= vertical ? sy : sx;
+      l.height *= vertical ? sx : sy;
+    }
+  }
+  // Disque ↔ cartouche : la deuxième surface change de taille, ses éléments suivent.
+  const media = surfaceGeometry(doc, 'disc');
+  if (media.W !== oldMedia.W || media.H !== oldMedia.H) {
+    const kx = media.W / oldMedia.W;
+    const ky = media.H / oldMedia.H;
+    const k = Math.max(kx, ky);
+    for (const l of doc.disc.layers) {
+      if (l.type === 'image') {
+        const cx = (l.x + l.width / 2) * kx;
+        const cy = (l.y + l.height / 2) * ky;
+        l.width *= k;
+        l.height *= k;
+        l.x = cx - l.width / 2;
+        l.y = cy - l.height / 2;
+      } else {
+        l.x *= kx;
+        l.y *= ky;
+        l.width *= kx;
+        if (l.height > 0) l.height *= ky;
+        if (l.type === 'text') l.fontSize = Math.max(3, Math.round(l.fontSize * Math.min(kx, ky) * 10) / 10);
+        if (l.type === 'rect') l.cornerRadius *= Math.min(kx, ky);
+      }
+    }
+  }
+}
 
 export interface Rect {
   x: number;
@@ -217,6 +380,8 @@ export interface Geometry {
   panels: Record<PanelId, { x: number; w: number }>;
   /** Présent pour la rondelle : diamètres imprimables. */
   disc?: { outer: number; inner: number };
+  /** Présent pour l'étiquette de cartouche : rayon des coins. */
+  cart?: { radius: number };
 }
 
 /** Géométrie de la rondelle : carré de 120 mm, centre en (60, 60). */
@@ -233,8 +398,66 @@ export function discGeometry(doc: Doc): Geometry {
   };
 }
 
+// Étiquette collée sur une cartouche Switch (21 × 31 mm). Pas de cote officielle :
+// 18,5 × 25 mm est une mesure de la communauté, à vérifier sur une vraie cartouche.
+export const CART = { width: 18.5, height: 25, radius: 1.2, bleed: 1, body: { width: 21, height: 31 } };
+
+/** Les jeux Switch sont sur cartouche : la deuxième surface devient l'étiquette de la cartouche. */
+export function usesCartridge(doc: Pick<Doc, 'template'>): boolean {
+  return doc.template === 'switch' || doc.template === 'switch2';
+}
+
+/**
+ * Habillage d'une étiquette de cartouche comme celles du commerce : bandeau rouge et logo en haut,
+ * visuel au milieu, bandeau noir avec le code du jeu en bas. Tout reste modifiable.
+ */
+export function cartLabelFrame(doc: Pick<Doc, 'template'>): Layer[] {
+  const geo = cartGeometry();
+  const top = 5.2;
+  const bottom = 2.6;
+  const two = doc.template === 'switch2';
+  const text = (name: string, value: string, y: number, extra: Partial<TextLayer>): TextLayer => ({
+    ...newTextLayer(geo, 'front', value),
+    name,
+    x: 0.6,
+    y,
+    width: geo.W - 1.2,
+    clip: 'all',
+    shadow: false,
+    role: 'cart-frame',
+    ...extra,
+  });
+  return [
+    { ...newRectLayer(geo, 'all'), name: 'Bandeau logo', x: -CART.bleed, y: -CART.bleed, width: geo.W + 2 * CART.bleed, height: top + CART.bleed, fill: '#e60012', role: 'cart-frame' },
+    text('Logo console', two ? 'NINTENDO SWITCH 2' : 'NINTENDO\nSWITCH', two ? 1.9 : 1.1, { fontFamily: 'Montserrat', fontSize: two ? 4.2 : 4.6, lineHeight: 0.95, letterSpacing: 0.05 }),
+    { ...newRectLayer(geo, 'all'), name: 'Bandeau code', x: -CART.bleed, y: geo.H - bottom, width: geo.W + 2 * CART.bleed, height: bottom + CART.bleed, fill: '#111111', role: 'cart-frame' },
+    text('Code du jeu', two ? 'LB-XXXXX-FRA' : 'LA-H-XXXXX-FRA', geo.H - bottom + 0.55, { fontFamily: 'Roboto Condensed', fontSize: 3.6, bold: false, letterSpacing: 0.12 }),
+  ];
+}
+
+/** Zone du visuel sur l'étiquette, entre les deux bandeaux. */
+export const CART_ART = { y: 5.2, height: CART.height - 5.2 - 2.6 };
+
+export function cartGeometry(): Geometry {
+  const full = { x: 0, w: CART.width };
+  return {
+    W: CART.width,
+    H: CART.height,
+    bleed: CART.bleed,
+    safe: 1,
+    panels: { back: full, spine: full, front: full },
+    cart: { radius: CART.radius },
+  };
+}
+
 export function surfaceGeometry(doc: Doc, surface: SurfaceId): Geometry {
-  return surface === 'disc' ? discGeometry(doc) : geometry(doc);
+  if (surface === 'case') return geometry(doc);
+  return usesCartridge(doc) ? cartGeometry() : discGeometry(doc);
+}
+
+/** Nom de la deuxième surface : la rondelle du disque, ou l'étiquette de la cartouche. */
+export function mediaName(doc: Pick<Doc, 'template'>): { title: string; lower: string } {
+  return usesCartridge(doc) ? { title: 'Cartouche', lower: "l'étiquette de la cartouche" } : { title: 'Rondelle', lower: 'la rondelle' };
 }
 
 export function surfaceLayers(doc: Doc, surface: SurfaceId): Layer[] {
@@ -246,12 +469,12 @@ export function surfaceBackground(doc: Doc, surface: SurfaceId): string {
 }
 
 export function geometry(doc: Doc): Geometry {
-  const t = TEMPLATES[doc.template];
-  const pw = t.panelWidth;
+  const t = TEMPLATES[doc.template] ?? TEMPLATES.dvd;
+  const { height, panelWidth: pw } = caseSize(doc);
   const s = doc.spine;
   return {
     W: pw * 2 + s,
-    H: t.height,
+    H: height,
     bleed: t.bleed,
     safe: t.safe,
     panels: {
@@ -308,12 +531,15 @@ export function uid(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export function newDoc(): Doc {
+/** Nouveau projet, dans le format du précédent (on enchaîne souvent les jeux d'une même console). */
+export function newDoc(format?: Pick<Doc, 'template' | 'custom' | 'spine'>): Doc {
+  const template = format && format.template in TEMPLATES ? format.template : 'dvd';
   return {
     version: 1,
     title: '',
-    template: 'dvd',
-    spine: TEMPLATES.dvd.spineDefault,
+    template,
+    custom: template === 'custom' ? format?.custom : undefined,
+    spine: template === 'custom' ? format!.spine : TEMPLATES[template].spineDefault,
     background: '#15161a',
     layers: [],
     disc: newDisc(),
@@ -419,7 +645,7 @@ export function newRectLayer(geo: Geometry, target: ClipTarget): RectLayer {
 
 /** Forme posée au centre d'un panneau (ou de la rondelle). */
 export function newShapeLayer(geo: Geometry, kind: ShapeKind, panel: PanelId = 'front'): RectLayer {
-  const p = geo.disc ? { x: 0, w: geo.W } : geo.panels[panel];
+  const p = geo.disc || geo.cart ? { x: 0, w: geo.W } : geo.panels[panel];
   const size = Math.min(40, p.w * 0.4);
   const width = kind === 'arrow' ? size * 1.5 : size;
   const label = SHAPES.find((s) => s.kind === kind)?.label ?? 'Forme';

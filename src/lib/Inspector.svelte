@@ -86,9 +86,9 @@
     {#if l.type === 'image' && asset}
       <section>
         <h3>Placer l'image</h3>
-        {#if geo.disc}
+        {#if geo.disc || geo.cart}
           <div class="grid2">
-            <button onclick={() => fit('all', 'cover')}>Remplir le disque</button>
+            <button onclick={() => fit('all', 'cover')}>{geo.cart ? "Remplir l'étiquette" : 'Remplir le disque'}</button>
             <button onclick={() => fit('all', 'contain')}>Ajuster</button>
           </div>
         {:else}

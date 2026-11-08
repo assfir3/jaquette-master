@@ -5,6 +5,7 @@
   import {
     PANEL_LABELS,
     DISC,
+    mediaName,
     panelAt,
     surfaceBackground,
     surfaceGeometry,
@@ -116,7 +117,7 @@
     for (const [id, node] of nodes) wireNode(id, node, geo);
 
     guides.destroyChildren();
-    if (showGuides) (geo.disc ? drawDiscGuides : drawGuides)(geo, k);
+    if (showGuides) (geo.disc ? drawDiscGuides : geo.cart ? drawCartGuides : drawGuides)(geo, k);
     // Hors suivi : sinon un simple clic de sélection reconstruirait la scène en plein glisser.
     untrack(attachTransformer);
     stage.batchDraw();
@@ -184,12 +185,12 @@
     if (disabled) return;
     const tol = 6 / scale;
     const { panels: p, W, H, bleed: b, safe: s } = geo;
-    const xs = geo.disc ? [0, W / 2, W] : [
+    const xs = geo.disc || geo.cart ? [0, W / 2, W] : [
       -b, 0, W, W + b,
       p.back.w / 2, p.spine.x, p.spine.x + p.spine.w / 2, p.front.x, p.front.x + p.front.w / 2,
       s, p.back.w - s, p.front.x + s, W - s,
     ];
-    const ys = geo.disc ? [0, H / 2, H] : [-b, 0, s, H / 2, H - s, H, H + b];
+    const ys = geo.disc || geo.cart ? [0, H / 2, H] : [-b, 0, s, H / 2, H - s, H, H + b];
     const box = node.getClientRect({ relativeTo: content });
     const bestX = closest([box.x, box.x + box.width / 2, box.x + box.width], xs, tol);
     const bestY = closest([box.y, box.y + box.height / 2, box.y + box.height], ys, tol);
@@ -294,6 +295,34 @@
     );
   }
 
+  /** Étiquette de cartouche : bord coupé aux coins arrondis, fond perdu voilé, marge de sécurité. */
+  function drawCartGuides(geo: Geometry, k: number) {
+    const px = 1 / k;
+    const { W, H, bleed: b, safe: s } = geo;
+    const veil = '#0b0c0fb0';
+    guides.add(
+      new Konva.Shape({
+        // Voile partout dans le fond perdu, sauf dans l'étiquette (règle pair-impair).
+        sceneFunc(ctx) {
+          const c = (ctx as unknown as { _context: CanvasRenderingContext2D })._context;
+          const r = geo.cart!.radius;
+          c.beginPath();
+          c.rect(-b, -b, W + 2 * b, H + 2 * b);
+          c.roundRect(0, 0, W, H, r);
+          c.fillStyle = veil;
+          c.fill('evenodd');
+        },
+        listening: false,
+      }),
+      new Konva.Rect({ x: 0, y: 0, width: W, height: H, cornerRadius: geo.cart!.radius, stroke: '#ff5a3c', strokeWidth: px }),
+      new Konva.Rect({ x: s, y: s, width: W - 2 * s, height: H - 2 * s, stroke: '#5ec8ff66', strokeWidth: px, dash: [2 * px, 3 * px] }),
+      new Konva.Text({
+        text: `ÉTIQUETTE · ${mm(W)} × ${mm(H)} mm`, fontSize: 10 * px, fontFamily: 'JetBrains Mono', fill: '#a3a9ba',
+        letterSpacing: 1.5 * px, x: -40, width: W + 80, y: -b - 16 * px, align: 'center', wrap: 'none',
+      }),
+    );
+  }
+
   function panelFromEvent(e: DragEvent): PanelId {
     stage.setPointersPositions(e);
     const pos = content.getRelativePointerPosition();
@@ -336,7 +365,7 @@
   ondrop={onDrop}
 >
   {#if dropPanel}
-    <div class="drop-hint">Déposer sur : <strong>{editor.surface === 'disc' ? 'la rondelle' : PANEL_LABELS[dropPanel]}</strong></div>
+    <div class="drop-hint">Déposer sur : <strong>{editor.surface === 'disc' ? mediaName(editor.doc).lower : PANEL_LABELS[dropPanel]}</strong></div>
   {/if}
   <div class="zoom">{Math.round((scale / (96 / 25.4)) * 100)} %</div>
 </div>

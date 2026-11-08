@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { TEMPLATE_STYLES, buildTemplate, type TemplateStyle } from './templates';
   import { editor } from './editor.svelte';
-  import { coverRect, geometry, newImageLayer, newTextLayer, PANEL_LABELS, type ClipTarget } from './model';
+  import { coverRect, geometry, mediaName, newImageLayer, newTextLayer, PANEL_LABELS, usesCartridge, type ClipTarget } from './model';
   import { placeLogo } from './logos';
   import KeysPanel from './KeysPanel.svelte';
   import {
@@ -179,7 +179,7 @@
   /** Crée la jaquette avec le modèle choisi (ou les scans officiels d'une édition). */
   async function build(pack?: CoverPack) {
     if (!game) return;
-    if ((editor.doc.layers.length || editor.doc.disc.layers.length) && !confirm('Remplacer la jaquette et la rondelle actuelles par une mise en page automatique ? (⌘Z pour revenir en arrière)')) return;
+    if ((editor.doc.layers.length || editor.doc.disc.layers.length) && !confirm(`Remplacer la jaquette et ${mediaName(editor.doc).lower} actuelles par une mise en page automatique ? (⌘Z pour revenir en arrière)`)) return;
     building = true;
     try {
       const load = (url: string | null | undefined) => (url && !broken[url] ? loadVisual(url).catch(() => undefined) : Promise.resolve(undefined));
@@ -225,7 +225,7 @@
       });
       editor.selectedId = null;
       editor.renderVersion++;
-      notify(`Jaquette et rondelle de « ${g.name} » créées. Tout reste modifiable.`);
+      notify(`Jaquette et ${usesCartridge(editor.doc) ? 'étiquette de cartouche' : 'rondelle'} de « ${g.name} » créées. Tout reste modifiable.`);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Mise en page impossible', 'error');
     } finally {
@@ -289,7 +289,7 @@
           {#if placing === v.url}
             <div class="place">
               {#each targets as t}<button onclick={() => place(v, t)}>{PANEL_LABELS[t]}</button>{/each}
-              <button onclick={() => place(v, 'disc')}>Rondelle</button>
+              <button onclick={() => place(v, 'disc')}>{mediaName(editor.doc).title}</button>
             </div>
           {/if}
           {#if kind === 'logos' || kind === 'studios'}
@@ -335,7 +335,7 @@
       {#if !hasMoby}
         <p class="note">
           Pour retrouver les vraies jaquettes françaises (face, dos et disque scannés), ajoute une clé
-          <strong>MobyGames</strong> dans <code class="path">{configFile}</code> (<code>MOBYGAMES_API_KEY</code>).
+          <strong>MobyGames</strong> dans <em>Clés d'API</em>, en bas de l'onglet Recherche.
         </p>
       {:else if mobyError}
         <p class="error">{mobyError}</p>

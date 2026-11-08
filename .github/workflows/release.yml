@@ -20,12 +20,9 @@ jobs:
         include:
           - label: macOS
             os: macos-latest
-            # Pas de certificat Apple sur GitHub : signature « ad hoc », suffisante pour lancer l'appli.
-            args: --mac dmg --arm64 --x64 -c.mac.identity=- -c.mac.hardenedRuntime=false
             files: release/*.dmg
           - label: Windows
             os: windows-latest
-            args: --win nsis --x64
             files: release/*.exe
     runs-on: ${{ matrix.os }}
     steps:
@@ -37,9 +34,68 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run build:electron
-      - run: npx electron-builder ${{ matrix.args }} --publish never
+
+      - name: Fabrication (Windows)
+        if: runner.os == 'Windows'
+        run: npx electron-builder --win nsis --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      # Mac : si les secrets Apple sont renseignés (voir docs/signature-mac.md), l'appli est signée
+      # avec le certificat Developer ID et notarisée par Apple (plus d'avertissement au lancement).
+      # Sinon, signature « ad hoc », suffisante pour lancer l'appli après un avertissement.
+      - name: Fabrication (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$MAC_CERT_P12_BASE64" ]; then
+            echo "Signature Developer ID et notarisation Apple"
+            export CSC_LINK="$MAC_CERT_P12_BASE64" CSC_KEY_PASSWORD="$MAC_CERT_PASSWORD"
+            npx electron-builder --mac dmg --arm64 --x64 --publish never
+          else
+            echo "Pas de certificat Apple : signature ad hoc"
+            unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac dmg --arm64 --x64 \
+              -c.mac.identity=- -c.mac.hardenedRuntime=false --publish never
+          fi
+
+      # Test de lancement : installe l'appli comme un utilisateur, l'ouvre, vérifie l'interface
+      # et la recherche de jeux (JAQUETTE_SMOKE_TEST), puis la désinstalle.
+      - name: Test de l'appli installée (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem release/*-windows-setup.exe | Select-Object -First 1
+          Start-Process -Wait -FilePath $setup.FullName -ArgumentList '/S', '/D=C:\JaquetteMaster'
+          $exe = 'C:\JaquetteMaster\Jaquette Master.exe'
+          if (-not (Test-Path $exe)) { throw "Appli non installée : $exe introuvable" }
+          $env:JAQUETTE_SMOKE_TEST = "$env:RUNNER_TEMP\smoke.json"
+          $p = Start-Process -PassThru -Wait -FilePath $exe
+          Get-Content $env:JAQUETTE_SMOKE_TEST
+          if ($p.ExitCode -ne 0) { throw "Test de lancement échoué (code $($p.ExitCode))" }
+          $uninstall = Get-ChildItem 'C:\JaquetteMaster\Uninstall*.exe' | Select-Object -First 1
+          Start-Process -Wait -FilePath $uninstall.FullName -ArgumentList '/S'
+
+      - name: Test de l'appli installée (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          dmg=$(ls release/*-mac-arm64.dmg | head -1)
+          mnt=$(hdiutil attach -nobrowse "$dmg" | tail -1 | cut -f3-)
+          cp -R "$mnt/Jaquette Master.app" "$RUNNER_TEMP/"
+          hdiutil detach "$mnt"
+          app="$RUNNER_TEMP/Jaquette Master.app"
+          codesign --verify --deep --strict "$app" && echo "Signature valide"
+          spctl --assess --type execute -v "$app" || echo "(non notarisée : avertissement au premier lancement)"
+          JAQUETTE_SMOKE_TEST="$RUNNER_TEMP/smoke.json" "$app/Contents/MacOS/Jaquette Master"
+          cat "$RUNNER_TEMP/smoke.json"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.label }}
@@ -69,7 +125,9 @@ jobs:
 
             ## Premier lancement
 
-            L'appli n'est pas encore signée par Apple ni par Microsoft : le système affiche un avertissement la première fois.
+            Chaque version est installée et lancée automatiquement sur Windows et sur macOS avant d'être publiée.
+
+            L'appli n'est pas signée par Microsoft (et par Apple tant que la signature n'est pas activée) : le système peut afficher un avertissement la première fois.
 
             - **Windows** : « Windows a protégé votre ordinateur » → *Informations complémentaires* → *Exécuter quand même*.
             - **macOS** : ouvre l'appli une fois, puis va dans *Réglages Système › Confidentialité et sécurité* et clique sur *Ouvrir quand même* en bas de la page.

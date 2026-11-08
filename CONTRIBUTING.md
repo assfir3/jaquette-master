@@ -46,7 +46,13 @@ npm run dist:mac     # .dmg (sur un Mac)
 npm run dist:win     # .exe (sur Windows)
 ```
 
-Les fichiers arrivent dans `release/`. Les versions officielles sont fabriquées par GitHub quand un mainteneur pousse un tag (`v0.2.0`…) : le `.dmg` et le `.exe` apparaissent alors dans les [Releases](https://github.com/assfir3/jaquette-master/releases).
+Les fichiers arrivent dans `release/`. Les versions officielles sont fabriquées par GitHub quand un mainteneur pousse un tag (`v0.2.0`…) : le `.dmg` et le `.exe` sont installés et lancés automatiquement sur Windows et macOS (test de lancement), puis apparaissent dans les [Releases](https://github.com/assfir3/jaquette-master/releases). La signature Apple est décrite dans [docs/signature-mac.md](docs/signature-mac.md).
+
+Pour tester l'appli fabriquée sans l'ouvrir à la main :
+
+```bash
+JAQUETTE_SMOKE_TEST=resultat.json npm run app   # écrit le résultat puis quitte (code 0 si tout va bien)
+```
 
 ## Repères dans le code
 

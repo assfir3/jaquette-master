@@ -86,6 +86,46 @@ function createWindow() {
     }
   });
   win.loadURL(process.env.VITE_DEV_SERVER_URL ?? `${ORIGIN}/index.html`);
+  if (SMOKE_FILE) win.webContents.once('did-finish-load', () => smokeTest(win, SMOKE_FILE));
+}
+
+/**
+ * Test de lancement, utilisé par GitHub Actions sur l'appli installée :
+ * JAQUETTE_SMOKE_TEST=<fichier> vérifie l'interface et le serveur intermédiaire,
+ * écrit le résultat en JSON dans ce fichier, puis quitte (code 0 si tout va bien).
+ */
+const SMOKE_FILE = process.env.JAQUETTE_SMOKE_TEST;
+
+async function smokeTest(win: BrowserWindow, file: string) {
+  const timer = setTimeout(() => finish({ ok: false, error: 'Délai dépassé' }), 60_000);
+  async function finish(result: Record<string, unknown>) {
+    clearTimeout(timer);
+    await writeFile(file, JSON.stringify({ version: app.getVersion(), platform: process.platform, arch: process.arch, ...result }, null, 2)).catch(() => {});
+    app.exit(result.ok ? 0 : 1);
+  }
+  try {
+    const checks = await win.webContents.executeJavaScript(`(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      for (let i = 0; i < 100 && !(document.querySelector('.brand') && document.querySelector('canvas')); i++) await wait(200);
+      const out = {
+        origin: location.origin,
+        interface: !!document.querySelector('.brand'),
+        canvas: !!document.querySelector('canvas'),
+        webgl: !!document.createElement('canvas').getContext('webgl2'),
+      };
+      try { out.status = (await (await fetch('/api/status')).json()).steam === true; } catch { out.status = false; }
+      out.search = 0;
+      for (let i = 0; i < 3 && !out.search; i++) {
+        try { out.search = (await (await fetch('/api/search?q=Portal%202')).json()).length || 0; } catch {}
+        if (!out.search) await wait(3000);
+      }
+      return out;
+    })()`);
+    const ok = checks.origin === ORIGIN && checks.interface && checks.canvas && checks.status && checks.search > 0;
+    await finish({ ok, ...checks });
+  } catch (err) {
+    await finish({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
 }
 
 app.whenReady().then(async () => {

@@ -167,6 +167,6 @@ export function startUpdates() {
   }
   // Pas en développement (sauf essai) ni pendant le test de lancement.
   if ((!app.isPackaged && !process.env.JAQUETTE_FAKE_VERSION) || process.env.JAQUETTE_SMOKE_TEST) return;
-  setTimeout(checkForUpdates, 8_000);
+  setTimeout(checkForUpdates, 3_000);
   setInterval(checkForUpdates, EVERY);
 }

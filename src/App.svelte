@@ -7,6 +7,7 @@
   import Shelf from './lib/Shelf.svelte';
   import PrintView from './lib/PrintView.svelte';
   import UpdateNotice from './lib/UpdateNotice.svelte';
+  import VersionBadge from './lib/VersionBadge.svelte';
   import { addLogo, type LogoRef } from './lib/logos';
   import { loadVisual } from './lib/search';
   import { editor } from './lib/editor.svelte';
@@ -422,6 +423,7 @@
 <div class="app">
   <header class="topbar">
     <div class="brand">Jaquette<span>/</span>Master</div>
+    <VersionBadge />
     <nav class="nav" aria-label="Sections">
       <button class:on={view === 'atelier'} aria-current={view === 'atelier' ? 'page' : undefined} onclick={() => (view = 'atelier')}>Atelier</button>
       <button class:on={view === 'shelf'} aria-current={view === 'shelf' ? 'page' : undefined} onclick={() => (view = 'shelf')}>Étagère</button>

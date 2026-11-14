@@ -20,7 +20,10 @@ jobs:
         include:
           - label: macOS
             os: macos-latest
-            files: release/*.dmg
+            # .zip : lu par l'appli Mac pour se mettre à jour toute seule.
+            files: |
+              release/*.dmg
+              release/*-mac-*.zip
           - label: Windows
             os: windows-latest
             # latest.yml : lu par l'appli Windows pour se mettre à jour toute seule.
@@ -61,11 +64,11 @@ jobs:
           if [ -n "$MAC_CERT_P12_BASE64" ]; then
             echo "Signature Developer ID et notarisation Apple"
             export CSC_LINK="$MAC_CERT_P12_BASE64" CSC_KEY_PASSWORD="$MAC_CERT_PASSWORD"
-            npx electron-builder --mac dmg --arm64 --x64 --publish never
+            npx electron-builder --mac dmg zip --arm64 --x64 --publish never
           else
             echo "Pas de certificat Apple : signature ad hoc"
             unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
-            CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac dmg --arm64 --x64 \
+            CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac dmg zip --arm64 --x64 \
               -c.mac.identity=- -c.mac.hardenedRuntime=false --publish never
           fi
 
@@ -130,7 +133,7 @@ jobs:
 
             ## Mises à jour
 
-            L'appli prévient quand une nouvelle version sort. Sur Windows, elle se télécharge seule et s'installe en redémarrant ; sur Mac, l'appli télécharge le bon .dmg et l'ouvre.
+            L'appli prévient quand une nouvelle version sort. Sur Windows, elle se télécharge seule et s'installe en redémarrant ; sur Mac aussi (à partir de la 0.3.1), elle se remplace toute seule au redémarrage.
 
             ## Premier lancement
 

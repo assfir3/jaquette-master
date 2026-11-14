@@ -1,7 +1,7 @@
 {
   "name": "jaquette-master",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -62,10 +62,18 @@
             "arm64",
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
         }
       ],
       "category": "public.app-category.graphics-design",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "Jaquette-Master-${version}-mac-${arch}.${ext}"
     },
     "dmg": {
       "artifactName": "Jaquette-Master-${version}-mac-${arch}.${ext}"

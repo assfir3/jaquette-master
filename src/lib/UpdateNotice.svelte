@@ -35,7 +35,7 @@
         <button onclick={() => call('page')}>Nouveautés</button>
       </div>
     {:else if s.state === 'downloading'}
-      <p>Téléchargement… {s.percent ?? 0} %</p>
+      <p>{(s.percent ?? 0) >= 100 ? 'Préparation de la mise à jour…' : `Téléchargement… ${s.percent ?? 0} %`}</p>
       <div class="bar"><span style:width={`${s.percent ?? 0}%`}></span></div>
     {:else if s.state === 'ready' && s.auto && !s.file}
       <p>La mise à jour est prête. Elle s'installera en fermant l'appli, ou tout de suite :</p>
@@ -54,7 +54,7 @@
         <button onclick={() => call('page')}>Nouveautés</button>
       </div>
     {:else}
-      <p class="err">Le téléchargement n'a pas abouti{s.error ? ` (${s.error})` : ''}.</p>
+      <p class="err" title={s.error}>La mise à jour n'a pas pu se faire. Tu peux la télécharger sur GitHub.</p>
       <div class="row">
         <button class="primary" onclick={() => call('page')}>Télécharger sur GitHub</button>
       </div>

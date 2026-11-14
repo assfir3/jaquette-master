@@ -8,6 +8,7 @@
   import PrintView from './lib/PrintView.svelte';
   import UpdateNotice from './lib/UpdateNotice.svelte';
   import VersionBadge from './lib/VersionBadge.svelte';
+  import ThemeToggle from './lib/ThemeToggle.svelte';
   import { addLogo, type LogoRef } from './lib/logos';
   import { loadVisual } from './lib/search';
   import { editor } from './lib/editor.svelte';
@@ -446,6 +447,7 @@
       <button onclick={() => editor.undo()} disabled={!editor.canUndo} title="Annuler (⌘Z)" aria-label="Annuler">↶</button>
       <button onclick={() => editor.redo()} disabled={!editor.canRedo} title="Rétablir (⇧⌘Z)" aria-label="Rétablir">↷</button>
     </div>
+    <ThemeToggle />
     <div class="export">
       <button
         class="primary"
@@ -881,7 +883,7 @@
     border-radius: 12px;
     border: 2px solid var(--line);
     background: var(--surface);
-    color: #d5d9e3;
+    color: var(--muted);
     font-size: 12px;
   }
   .views button.on {
@@ -901,34 +903,34 @@
   .v-case i {
     width: 26px;
     height: 34px;
-    background: #3a4256;
+    background: var(--icon-1);
   }
   .v-case i:last-child {
-    background: #59627a;
+    background: var(--icon-2);
   }
   .v-case b {
     width: 5px;
     height: 34px;
-    background: #2a3142;
+    background: var(--icon-3);
   }
   .v-disc i {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: radial-gradient(circle, var(--surface) 0 4px, #59627a 4.5px 9px, #3a4256 9.5px);
+    background: radial-gradient(circle, var(--surface) 0 4px, var(--icon-2) 4.5px 9px, var(--icon-1) 9.5px);
   }
   .v-cart i {
     width: 24px;
     height: 34px;
     border-radius: 3px 3px 4px 4px;
-    background: linear-gradient(#3a4256 0 22%, #59627a 22% 92%, #3a4256 92%);
+    background: linear-gradient(var(--icon-1) 0 22%, var(--icon-2) 22% 92%, var(--icon-1) 92%);
   }
   .v-3d i {
     width: 24px;
     height: 34px;
-    background: #59627a;
+    background: var(--icon-2);
     transform: perspective(70px) rotateY(-30deg);
-    box-shadow: -5px 0 0 #2a3142;
+    box-shadow: -5px 0 0 var(--icon-3);
   }
   .menu small {
     color: var(--muted);
@@ -1114,11 +1116,11 @@
     border-radius: 10px;
     background: var(--surface-3);
     border: 1px solid var(--line);
-    box-shadow: 0 10px 30px #0008;
+    box-shadow: 0 10px 30px var(--shadow);
     font-size: 13px;
   }
   .toast.error {
-    border-color: #ff8a80;
-    color: #ffd2cc;
+    border-color: var(--danger);
+    color: var(--danger-text);
   }
 </style>

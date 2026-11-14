@@ -74,7 +74,7 @@
     border-radius: 12px;
     background: var(--surface-3);
     border: 1px solid var(--line-strong);
-    box-shadow: 0 14px 40px #000a;
+    box-shadow: 0 14px 40px var(--shadow);
     font-size: 13px;
     display: flex;
     flex-direction: column;
@@ -118,7 +118,7 @@
     line-height: 1.4;
   }
   .err {
-    color: #ffb4ab;
+    color: var(--danger);
   }
   .row {
     display: flex;

@@ -130,8 +130,8 @@
     color: var(--muted);
   }
   .badge.on {
-    border-color: #2f7a4d;
-    color: #5fd38d;
+    border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+    color: var(--ok);
   }
   .svc {
     display: flex;
@@ -179,10 +179,10 @@
     margin: 0;
   }
   .ok {
-    color: #5fd38d;
+    color: var(--ok);
   }
   .err {
-    color: #ff8a80;
+    color: var(--danger);
   }
   .link {
     align-self: flex-start;

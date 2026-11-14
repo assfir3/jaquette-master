@@ -2,6 +2,7 @@
   import Konva from 'konva';
   import { onMount, untrack } from 'svelte';
   import { editor } from './editor.svelte';
+  import { cssVar, theme } from './theme.svelte';
   import {
     PANEL_LABELS,
     DISC,
@@ -54,7 +55,7 @@
       rotationSnapTolerance: 4,
       borderStroke: '#ff5a3c',
       anchorStroke: '#ff5a3c',
-      anchorFill: '#0d1018',
+      anchorFill: cssVar('--bg'),
       anchorSize: 9,
       anchorCornerRadius: 2,
       ignoreStroke: true,
@@ -117,6 +118,7 @@
     for (const [id, node] of nodes) wireNode(id, node, geo);
 
     guides.destroyChildren();
+    void theme.effective; // redessine les repères au changement de thème
     if (showGuides) (geo.disc ? drawDiscGuides : geo.cart ? drawCartGuides : drawGuides)(geo, k);
     // Hors suivi : sinon un simple clic de sélection reconstruirait la scène en plein glisser.
     untrack(attachTransformer);
@@ -225,7 +227,7 @@
       new Konva.Rect({ x: -b, y: 0, width: b, height: H, fill: veil }),
       new Konva.Rect({ x: W, y: 0, width: b, height: H, fill: veil }),
       new Konva.Rect({ x: 0, y: 0, width: W, height: H, stroke: '#ff5a3c', strokeWidth: px }),
-      new Konva.Rect({ x: -b, y: -b, width: W + 2 * b, height: H + 2 * b, stroke: '#ffffff33', strokeWidth: px, dash: [4 * px, 4 * px] }),
+      new Konva.Rect({ x: -b, y: -b, width: W + 2 * b, height: H + 2 * b, stroke: cssVar('--guide'), strokeWidth: px, dash: [4 * px, 4 * px] }),
     );
     for (const x of [p.spine.x, p.front.x]) {
       guides.add(new Konva.Line({ points: [x, -b, x, H + b], stroke: '#ff5a3c', strokeWidth: px, dash: [6 * px, 4 * px] }));
@@ -239,7 +241,7 @@
       );
     }
     // Cotes façon plan : nom et largeur de chaque partie, hauteur à droite.
-    const ink = '#a3a9ba';
+    const ink = cssVar('--muted');
     const rule = '#3a4256';
     const mono = 'JetBrains Mono';
     const y = -b - 12 * px;
@@ -282,14 +284,14 @@
     const circle = (d: number, stroke: string, dash?: number[]) =>
       new Konva.Circle({ x: c, y: c, radius: d / 2, stroke, strokeWidth: px, dash: dash?.map((v) => v * px) });
     guides.add(
-      circle(DISC.size, '#ffffff40', [4, 4]),
+      circle(DISC.size, cssVar('--guide'), [4, 4]),
       circle(outer, '#ff5a3c'),
       circle(inner, '#ff5a3c'),
       circle(outer - 2 * geo.safe, '#5ec8ff66', [2, 3]),
       circle(inner + 2 * geo.safe, '#5ec8ff66', [2, 3]),
-      new Konva.Circle({ x: c, y: c, radius: DISC.hole / 2, fill: '#0d1018', stroke: '#ffffff40', strokeWidth: px }),
+      new Konva.Circle({ x: c, y: c, radius: DISC.hole / 2, fill: cssVar('--bg'), stroke: cssVar('--guide'), strokeWidth: px }),
       new Konva.Text({
-        text: `RONDELLE · ${mm(outer)} / ${mm(inner)} mm`, fontSize: 10 * px, fontFamily: 'JetBrains Mono', fill: '#a3a9ba',
+        text: `RONDELLE · ${mm(outer)} / ${mm(inner)} mm`, fontSize: 10 * px, fontFamily: 'JetBrains Mono', fill: cssVar('--muted'),
         letterSpacing: 1.5 * px, x: 0, width: geo.W, y: -16 * px, align: 'center', wrap: 'none',
       }),
     );
@@ -317,7 +319,7 @@
       new Konva.Rect({ x: 0, y: 0, width: W, height: H, cornerRadius: geo.cart!.radius, stroke: '#ff5a3c', strokeWidth: px }),
       new Konva.Rect({ x: s, y: s, width: W - 2 * s, height: H - 2 * s, stroke: '#5ec8ff66', strokeWidth: px, dash: [2 * px, 3 * px] }),
       new Konva.Text({
-        text: `ÉTIQUETTE · ${mm(W)} × ${mm(H)} mm`, fontSize: 10 * px, fontFamily: 'JetBrains Mono', fill: '#a3a9ba',
+        text: `ÉTIQUETTE · ${mm(W)} × ${mm(H)} mm`, fontSize: 10 * px, fontFamily: 'JetBrains Mono', fill: cssVar('--muted'),
         letterSpacing: 1.5 * px, x: -40, width: W + 80, y: -b - 16 * px, align: 'center', wrap: 'none',
       }),
     );
@@ -378,7 +380,7 @@
     min-height: 0;
     overflow: hidden;
     background-color: var(--bg);
-    background-image: radial-gradient(#1c2130 1px, transparent 1px);
+    background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
     background-size: 20px 20px;
   }
   .drop-hint {

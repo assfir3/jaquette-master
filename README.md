@@ -132,6 +132,7 @@ Les positions des planches d'étiquettes du commerce varient d'une marque à l'a
 - Textes (titre face, titre tranche pivoté, résumé au dos), bandes de couleur, calques, aimantation sur les plis et les marges.
 - Indication de la résolution réelle de chaque image à l'impression (dpi).
 - Export : PDF A4 paysage (imprimante maison), PDF avec traits de coupe, PDF format exact, PNG 300 dpi.
+- Thème clair ou sombre (bouton à côté de ↶ ↷), ou automatique comme le système.
 - Projet enregistré dans un fichier `.jaquette.json` (images incluses) + sauvegarde automatique sur l'étagère du navigateur.
 
 ## Organisation du code

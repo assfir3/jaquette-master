@@ -560,7 +560,7 @@
     justify-content: center;
     gap: 6px;
     padding: 0;
-    border: 1.5px dashed #3a4256;
+    border: 1.5px dashed var(--icon-2);
     border-radius: 10px;
     background: #ffffff05;
     color: var(--muted);
@@ -613,9 +613,9 @@
   .plank {
     position: relative;
     height: 10px;
-    background: linear-gradient(180deg, #59627a, #2e3546 35%, #1c212d);
+    background: linear-gradient(180deg, var(--plank-1), var(--plank-2) 35%, var(--plank-3));
     border-radius: 2px;
-    box-shadow: inset 0 1px 0 #ffffff30, 0 14px 30px #000b;
+    box-shadow: inset 0 1px 0 #ffffff30, 0 14px 30px var(--shadow);
   }
   /* Barre d'outils : recherche, formats, tri, affichage. */
   .toolbar {

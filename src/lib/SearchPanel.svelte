@@ -713,8 +713,8 @@
     background: #000a;
   }
   .src.official {
-    color: #5fd38d;
-    border-color: #5fd38d66;
+    color: var(--ok);
+    border-color: color-mix(in srgb, var(--ok) 40%, transparent);
   }
   textarea {
     width: 100%;
@@ -746,7 +746,7 @@
   .error {
     margin: 0;
     font-size: 12px;
-    color: #ff8a80;
+    color: var(--danger);
   }
   a {
     color: var(--accent);

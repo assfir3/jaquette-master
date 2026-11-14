@@ -321,7 +321,7 @@
     border-color: #ff5a3c66;
   }
   .zones .rm:hover {
-    color: #ff8a80;
+    color: var(--danger);
   }
   .hint {
     margin: 0;
@@ -335,6 +335,6 @@
   .error {
     margin: 0;
     font-size: 12px;
-    color: #ff8a80;
+    color: var(--danger);
   }
 </style>

@@ -386,7 +386,7 @@
     border-radius: 8px;
     background: #ff5a3c1f;
     border: 1px solid #ff5a3c55;
-    color: #ffc4b8;
+    color: var(--accent-text);
     font-size: 12px;
     line-height: 1.45;
   }

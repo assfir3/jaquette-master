@@ -326,10 +326,10 @@
     background: var(--surface-2);
   }
   .dpi.ok strong {
-    color: #5fd38d;
+    color: var(--ok);
   }
   .dpi.bad {
-    color: #ff8a80;
+    color: var(--danger);
   }
   .actions {
     flex-direction: row;

@@ -12,6 +12,8 @@ Les applis prêtes à installer sont dans les [Releases](https://github.com/assf
 
 L'appli n'est pas encore signée par Apple ni Microsoft : au premier lancement, Windows affiche « Windows a protégé votre ordinateur » (*Informations complémentaires* → *Exécuter quand même*) ; sur Mac, ouvre l'appli une fois puis clique sur *Ouvrir quand même* dans *Réglages Système › Confidentialité et sécurité*.
 
+**Mises à jour** : l'appli regarde au lancement (puis toutes les 6 heures) si une nouvelle version est sortie sur GitHub et l'affiche en bas à droite. Sur Windows, elle se télécharge en arrière-plan et s'installe au redémarrage (à partir de la version 0.2.0). Sur Mac, l'appli télécharge le bon `.dmg` dans Téléchargements et l'ouvre : il suffit de glisser l'appli dans *Applications*. Pour essayer sans publier : `JAQUETTE_FAKE_VERSION=0.0.1 npm run app`.
+
 Les clés d'API facultatives (SteamGridDB, MobyGames) se rangent dans le fichier `config.json` créé au premier lancement ; son emplacement exact est affiché dans l'onglet Recherche :
 - macOS : `~/Library/Application Support/jaquette-master/config.json`
 - Windows : `%APPDATA%\jaquette-master\config.json`

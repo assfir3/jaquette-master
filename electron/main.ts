@@ -6,6 +6,7 @@ import { app, BrowserWindow, Menu, protocol, shell } from 'electron';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { handleApi, type Env } from '../server/api';
+import { handleUpdate, startUpdates } from './updates';
 
 const SCHEME = 'jaquette';
 const ORIGIN = `${SCHEME}://app`;
@@ -130,7 +131,7 @@ async function smokeTest(win: BrowserWindow, file: string) {
 
 app.whenReady().then(async () => {
   const env = await loadEnv();
-  protocol.handle(SCHEME, async (req) => (await handleApi(req, env)) ?? serveFile(new URL(req.url)));
+  protocol.handle(SCHEME, async (req) => (await handleUpdate(req)) ?? (await handleApi(req, env)) ?? serveFile(new URL(req.url)));
 
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(
@@ -141,6 +142,7 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+  startUpdates();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

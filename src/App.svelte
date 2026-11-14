@@ -6,6 +6,7 @@
   import LogosPanel from './lib/LogosPanel.svelte';
   import Shelf from './lib/Shelf.svelte';
   import PrintView from './lib/PrintView.svelte';
+  import UpdateNotice from './lib/UpdateNotice.svelte';
   import { addLogo, type LogoRef } from './lib/logos';
   import { loadVisual } from './lib/search';
   import { editor } from './lib/editor.svelte';
@@ -715,6 +716,7 @@
 {#if busy}
   <div class="busy">{busy}</div>
 {/if}
+<UpdateNotice />
 {#if toast}
   <div class="toast" class:error={toast.kind === 'error'}>{toast.text}</div>
 {/if}

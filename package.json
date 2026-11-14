@@ -1,7 +1,7 @@
 {
   "name": "jaquette-master",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,6 +20,7 @@
     "@types/three": "^0.187.0",
     "electron": "44.9.3",
     "electron-builder": "26.18.0",
+    "electron-updater": "6.8.11",
     "esbuild": "0.28.2",
     "jspdf": "^4.2.1",
     "konva": "^10.9.1",
@@ -94,6 +95,13 @@
     },
     "appImage": {
       "artifactName": "Jaquette-Master-${version}-linux.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "assfir3",
+        "repo": "jaquette-master"
+      }
+    ]
   }
 }

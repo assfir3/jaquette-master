@@ -1,53 +1,14 @@
 <script lang="ts">
   // Carte « Nouvelle version » de l'appli de bureau. Invisible dans la version web (pas de /api/update).
   import { onMount } from 'svelte';
+  import { callUpdate as call, remindLater as hide, updates, watchUpdates } from './updates.svelte';
 
-  type UpdateState = {
-    current: string;
-    state: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'ready' | 'error';
-    auto: boolean;
-    version?: string;
-    page?: string;
-    percent?: number;
-    file?: string;
-    error?: string;
-  };
-
-  const HIDDEN = 'jaquette-master:update-later';
-  let s = $state<UpdateState | null>(null);
-  let later = $state<string | null>(null);
-  try {
-    later = localStorage.getItem(HIDDEN);
-  } catch {}
-
-  async function call(action = ''): Promise<void> {
-    try {
-      const res = await fetch(`/api/update${action ? `/${action}` : ''}`, { cache: 'no-store' });
-      if (!res.ok || !res.headers.get('content-type')?.includes('json')) return;
-      s = await res.json();
-    } catch {}
-  }
-
-  onMount(() => {
-    call();
-    // Rapide pendant un téléchargement, sinon de temps en temps (l'appli vérifie GitHub toutes les 6 h).
-    let t: ReturnType<typeof setTimeout>;
-    const loop = () => {
-      t = setTimeout(async () => {
-        await call();
-        loop();
-      }, s?.state === 'downloading' || s?.state === 'checking' ? 700 : 30_000);
-    };
-    loop();
-    return () => clearTimeout(t);
-  });
+  const s = $derived(updates.s);
+  const later = $derived(updates.later);
+  onMount(watchUpdates);
 
   function remindLater() {
-    if (!s?.version) return;
-    later = s.version;
-    try {
-      localStorage.setItem(HIDDEN, s.version);
-    } catch {}
+    if (s?.version) hide(s.version);
   }
 
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
